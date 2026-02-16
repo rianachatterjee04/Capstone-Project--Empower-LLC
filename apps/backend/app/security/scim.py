@@ -1,0 +1,1 @@
+# SCIM provisioning stub

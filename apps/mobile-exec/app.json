@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Foundry Executive",
+    "slug": "foundry-executive",
+    "version": "0.1.0",
+    "sdkVersion": "51.0.0",
+    "platforms": ["ios","android"],
+    "extra": {
+      "apiBaseUrl": "http://localhost:8000/api"
+    }
+  }
+}
