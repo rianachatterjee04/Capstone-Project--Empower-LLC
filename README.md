@@ -96,6 +96,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
 NEXT_PUBLIC_API_WS=ws://localhost:8000
 ```
 
+link to the website- https://supabase.com/dashboard/project/cyosmjplytvlgzkiymek
+
+
 ### Run
 
 ```bash
