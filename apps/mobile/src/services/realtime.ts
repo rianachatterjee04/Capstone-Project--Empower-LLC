@@ -15,10 +15,10 @@ export function connectRealtime(onEvent: (event: any) => void) {
   // already connected
   if (socket && socket.readyState === WebSocket.OPEN) return;
 
-  const url =
-    (process.env.NEXT_PUBLIC_API_WS ?? "ws://localhost:8000") + "/ws";
+  const wsBase =
+    process.env.EXPO_PUBLIC_API_WS ?? "ws://localhost:8000";
 
-  socket = new WebSocket(url);
+  socket = new WebSocket(wsBase + "/ws");
 
   socket.onopen = () => {
     console.log("🧠 Foundry realtime connected");
@@ -35,7 +35,6 @@ export function connectRealtime(onEvent: (event: any) => void) {
 
   socket.onclose = () => {
     console.log("⚠️ realtime disconnected — retrying");
-
     if (reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
@@ -45,4 +44,3 @@ export function connectRealtime(onEvent: (event: any) => void) {
 
   socket.onerror = () => socket?.close();
 }
-

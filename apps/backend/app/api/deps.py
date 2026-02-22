@@ -29,3 +29,11 @@ async def require_org(actor: Actor = Depends(require_auth)) -> Actor:
 
 async def db_session(db: AsyncSession = Depends(get_db)) -> AsyncSession:
     return db
+
+import os
+from fastapi import Header
+
+def require_internal_ai(x_internal_ai_secret: str = Header(...)) -> None:
+    expected = os.getenv("INTERNAL_AI_SHARED_SECRET", "dev-internal-secret")
+    if x_internal_ai_secret != expected:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid internal secret")

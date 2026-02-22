@@ -1,5 +1,5 @@
 from .context_builder import build_context
-from .decision_engine import decide_action
+from .decision_engine import decide
 from .memory import remember
 
 

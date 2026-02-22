@@ -28,13 +28,8 @@ from app.api.realtime_ws import router as realtime_router
 from app.copilot.copilot_router import router as copilot_router
 
 # Intelligence routers
-from app.api.routers.intelligence import (
-    compensation,
-    equity,
-    education,
-    reconciliation,
-    narratives
-)
+from app.api.routers.intelligence import router as intelligence_router
+app.include_router(intelligence_router)
 
 # Middleware
 from app.middleware.view_audit import ViewAuditMiddleware
@@ -67,14 +62,7 @@ app.include_router(copilot_router, prefix="/api")
 # -----------------------------------------------------------------------------
 app.include_router(realtime_router)
 
-# -----------------------------------------------------------------------------
-# Intelligence Layer
-# -----------------------------------------------------------------------------
-app.include_router(compensation.router)
-app.include_router(equity.router)
-app.include_router(education.router)
-app.include_router(reconciliation.router)
-app.include_router(narratives.router)
+# Intelligence Layer routers are included via intelligence_router above
 
 # -----------------------------------------------------------------------------
 # Health

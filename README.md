@@ -1,117 +1,290 @@
-# Foundry People (AI-native HR OS) — DB + RLS edition
+# Foundry People – Local Development Setup
 
-Locked stack:
-- Frontend: React + Next.js (App Router)
-- Backend: FastAPI (async) + SQLAlchemy
-- Data/Auth: Supabase Postgres + Auth + Storage
+This repository serves as the central hub for the Foundry People ecosystem, managing everything from AI orchestration to employee portals.
 
-This package upgrades the previous MVP by adding:
-✅ Full Postgres schema
-✅ Supabase Row Level Security (RLS) policies
-✅ Backend endpoints migrated from in-memory stubs to DB
+---
 
-## 1) Supabase setup
-1. Create a Supabase project
-2. Run migrations in `infra/supabase/migrations` (SQL editor or `supabase db push`)
-3. Ensure your users have `app_metadata.org_id` and `app_metadata.role`
+## 📦 Repository Overview
 
-### Required JWT claims
-- `app_metadata.org_id` (uuid as string)
-- `app_metadata.role` in: owner/admin/hr/manager/employee
+- 🐳 **Backend API**: FastAPI  
+- 🐘 **Database**: PostgreSQL  
+- 🤖 **AI Orchestrator**: Internal Service  
+- 🌐 **Web Employee Portal**: Next.js  
+- 🌐 **Web Employer Portal**: Next.js  
+- 📱 **Mobile App**: Expo  
+- 📱 **Mobile Executive App**: Expo  
 
-## 2) Backend setup
+---
+
+## 1️⃣ Create Python Virtual Environment
+
+From the root `2026/` directory:
+
 ```bash
-cd apps/backend
-cp .env.example .env
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+conda create -n empower_llc python=3.11
+conda activate empower_llc
 ```
 
-## 3) Web portals
-Employer:
+---
+
+## 2️⃣ Start Infrastructure (Docker)
+
+From the root directory:
+
 ```bash
-cd apps/web-employer
-cp .env.example .env.local
-npm install
-npm run dev
+docker compose up --build
 ```
 
-Employee:
+### Services Started
+
+| Service          | Port  |
+|------------------|-------|
+| Postgres         | 5432  |
+| Backend API      | 8000  |
+| AI Orchestrator  | Internal |
+
+Backend API available at:
+
+```
+http://localhost:8000
+```
+
+To stop services:
+
+```bash
+docker compose down
+```
+
+---
+
+## 3️⃣ Backend Environment Variables
+
+The backend requires a `.env` file at the root level.
+
+Example:
+
+```env
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=empower
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+INTERNAL_AI_SECRET=your_secret_here
+```
+
+---
+
+## 4️⃣ Web Employee Portal
+
+**Directory:** `apps/web-employee`
+
+### Setup
+
 ```bash
 cd apps/web-employee
-cp .env.example .env.local
+cp .env.local.example .env.local
+```
+
+### Configuration
+
+Edit `.env.local`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
+NEXT_PUBLIC_API_WS=ws://localhost:8000
+```
+
+### Run
+
+```bash
 npm install
 npm run dev
 ```
 
-## Notes
-- The backend enforces tenant isolation in queries. Supabase RLS also enforces isolation when using direct PostgREST access.
-- Sensitive onboarding values should be encrypted at-rest in production (KMS). This repo stores minimal PII by default (SSN last4 only).
+Runs on:
 
-## Enterprise modules added
-- AI Memory (per-tenant vector memory)
-- Policy compiler (English → DSL)
-- Escalation engine (SLA timers + overdue bumps)
-- Documents (storage pointers + verification stub)
-- Realtime WS scaffold
-- Mobile app scaffold (Expo)
+```
+http://localhost:3000
+```
 
+---
 
-### Added (full production foundations)
-- Market benchmarking provider pattern + capture endpoint
-- Bonus pool + payout calculator
-- Benefits optimization MVP
-- True manager-subtree RLS (recursive)
-- Supabase Storage signed upload (best-effort) + HR verification queue
-- View audit logging + /api/audit/views
-- ATS syndication scaffolding
-- Celery background job runner (Redis)
+## 5️⃣ Web Employer Portal
 
-## v4 Additions: AI Memory + Policy DSL + Executive Mobile + CFO Dashboard
-### AI Memory (Production)
-- Set `OPENAI_API_KEY`
-- Set `EMBEDDINGS_PROVIDER=openai` (or `mock`)
-- Uses `ai_memory_chunks` (pgvector) + `ai_decisions` for decision lineage
+**Directory:** `apps/web-employer`
 
-### Policy DSL → Execution UI
-- Employer portal: `/app/policies-exec`
-- Backend: `/api/policies2/*` endpoints
-- Temporal escalation workflow stub: `apps/backend/app/temporal/workflows/escalation.py`
+### Setup
 
-### Executive Mobile App (Expo)
-- `cd apps/mobile-exec && npm i && npm run start`
-- Registers Expo push token via `/api/push/register`
-- Approvals feed: `/api/approvals/pending`
+```bash
+cd apps/web-employer
+cp .env.local.example .env.local
+```
 
-### CFO Scenario Modeling
-- Employer portal: `/app/cfo`
-- Backend: `/api/cfo/scenario` + `/api/cfo/org-summary`
+### Configuration
 
-### Temporal
-- `docker compose -f infra/temporal/docker-compose.yml up -d`
-- Run worker: `python -m app.temporal.worker`
+Edit `.env.local` (same structure as employee portal):
 
-## v5: Fully operational ATS sync (Greenhouse + Lever)
-### Configure secrets
-- Set `INTEGRATIONS_ENC_KEY` (Fernet key) for token encryption (generate with Python: `from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())`)
-- Greenhouse: set `GREENHOUSE_API_KEY` or connect via UI by pasting key
-- Lever: set `LEVER_CLIENT_ID`, `LEVER_CLIENT_SECRET`, `LEVER_REDIRECT_URI`
-- Webhook secrets: set `GREENHOUSE_WEBHOOK_SECRET` / `LEVER_WEBHOOK_SECRET` (or use the secrets created per-org in the Integrations UI)
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
+NEXT_PUBLIC_API_WS=ws://localhost:8000
+```
 
-### Run Temporal
-- `docker compose -f infra/temporal/docker-compose.yml up -d`
-- `cd apps/backend && uvicorn app.main:app --reload`
-- In another terminal: `cd apps/backend && python -m app.temporal.worker`
+### Run
 
-### ATS sync outputs
-- Jobs: `public.ats_job_postings`
-- Candidates: `public.ats_candidates`
+```bash
+npm install
+npm run dev
+```
 
-## v6: Event replay + stage mapping + AI screening loop (Greenhouse/Lever)
-See /app/ats-mapping and POST /api/integrations/replay/{provider}
+Runs on:
 
-## v7 Authority Layer
-Adds AI authority governance, policy consequences, human decision ledger,
-authority delegation, time-aware org constraints, and board exports.
-# Capstone-Project--Empower-LLC
+```
+http://localhost:3001
+```
+
+(if 3000 is already in use)
+
+---
+
+## 6️⃣ Mobile App (Employee)
+
+**Directory:** `apps/mobile`
+
+### Setup
+
+```bash
+cd apps/mobile
+ulimit -n 65536
+npm install
+npm install typescript@~5.3.3 @types/react@~18.2.79 --save-dev
+```
+
+### Run
+
+```bash
+npx expo start
+```
+
+Scan the QR code with Expo Go.
+
+Metro will run on:
+
+```
+exp://<your-local-ip>:8081
+```
+
+---
+
+## 7️⃣ Mobile Executive App
+
+**Directory:** `apps/mobile-exec/mobile-exec-fixed`
+
+### Setup
+
+```bash
+cd apps/mobile-exec/mobile-exec-fixed
+ulimit -n 65536
+npm install
+npm install typescript@~5.3.3 @types/react@~18.2.79 --save-dev
+```
+
+### Run
+
+```bash
+npx expo start
+```
+
+If 8081 is in use, Expo will prompt to use 8082.
+
+---
+
+## 8️⃣ Common Issues & Troubleshooting
+
+### ❗ Invalid supabaseUrl
+
+If you see:
+
+```
+Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL
+```
+
+You likely have placeholder values in `.env.local`.
+
+Replace:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+```
+
+With your actual project URL:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co
+```
+
+Then restart the dev server.
+
+---
+
+### 💡 EMFILE: too many open files (Expo)
+
+Run:
+
+```bash
+ulimit -n 65536
+```
+
+Then restart Expo.
+
+---
+
+### ⚠ Backend 500 Errors / Missing Tables
+
+If you see:
+
+```
+relation "onboarding_packets" does not exist
+```
+
+Run migrations:
+
+```bash
+docker compose exec backend alembic upgrade head
+```
+
+---
+
+## 9️⃣ Port Quick Reference
+
+| Service        | Port  |
+|----------------|-------|
+| Postgres       | 5432  |
+| Backend API    | 8000  |
+| Web Employee   | 3000  |
+| Web Employer   | 3001  |
+| Mobile         | 8081  |
+| Mobile Exec    | 8082  |
+
+---
+
+## 🔟 Recommended Startup Order
+
+1. `conda activate empower_llc`
+2. `docker compose up --build`
+3. Start Web Employee
+4. Start Web Employer
+5. Start Mobile
+6. Start Mobile Exec
+
+---
+
+## 🎉 System Architecture
+
+- **Clients (Web & Mobile)** → Connect to Backend API  
+- **Backend API** → Writes to Postgres  
+- **AI Orchestrator** → Communicates with Backend API  
+- **Supabase** → Handles authentication for all frontend clients  

@@ -3,12 +3,12 @@
 import { useEffect } from "react";
 
 export default function RealtimeBootstrap() {
-
   useEffect(() => {
     let socket: WebSocket | null = null;
 
     function connect() {
-      socket = new WebSocket("ws://localhost:8000/ws");
+      const wsBase = process.env.NEXT_PUBLIC_API_WS ?? "ws://localhost:8000";
+      socket = new WebSocket(wsBase + "/ws");
 
       socket.onmessage = (msg) => {
         const event = JSON.parse(msg.data);
@@ -18,6 +18,8 @@ export default function RealtimeBootstrap() {
       socket.onclose = () => {
         setTimeout(connect, 2000);
       };
+
+      socket.onerror = () => socket?.close();
     }
 
     connect();
@@ -27,4 +29,3 @@ export default function RealtimeBootstrap() {
 
   return null;
 }
-

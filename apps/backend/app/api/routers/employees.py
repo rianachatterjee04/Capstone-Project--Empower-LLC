@@ -8,8 +8,7 @@ from datetime import date
 
 from app.api.deps import require_org, db_session, Actor
 from app.api.schemas import EmployeeOut, EmployeeCreate
-from app.db.models import Employee, AuditEvent
-
+from app.db.models import Employee
 # ⭐ Behavioral OS
 from app.workflow.engine import engine
 

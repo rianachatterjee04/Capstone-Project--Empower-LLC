@@ -1,28 +1,62 @@
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { respondToDecision } from "../services/decisions";
 
-export default function DecisionCard({ event }) {
+interface Action {
+  id: string;
+  label: string;
+}
 
+interface DecisionEvent {
+  id: string;
+  title: string;
+  message: string;
+  actions: Action[];
+}
+
+export default function DecisionCard({ event }: { event: DecisionEvent }) {
   async function respond(action: string) {
     await respondToDecision(event.id, action);
   }
 
   return (
-    <div className="card shadow-lg p-4 bg-white rounded-xl">
-      <h3 className="text-lg font-bold">{event.title}</h3>
-      <p className="text-gray-600 mb-4">{event.message}</p>
+    <View style={styles.card}>
+      <Text style={styles.title}>{event.title}</Text>
+      <Text style={styles.message}>{event.message}</Text>
 
-      <div className="flex gap-2">
+      <View style={styles.actions}>
         {event.actions.map(a => (
-          <button
+          <Pressable
             key={a.id}
-            className={`btn ${a.style}`}
-            onClick={() => respond(a.id)}
+            style={styles.button}
+            onPress={() => respond(a.id)}
           >
-            {a.label}
-          </button>
+            <Text style={styles.buttonText}>{a.label}</Text>
+          </Pressable>
         ))}
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }
 
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  title: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
+  message: { color: "#555", marginBottom: 12 },
+  actions: { flexDirection: "row", gap: 8 },
+  button: {
+    backgroundColor: "#000",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  buttonText: { color: "#fff", fontWeight: "600" },
+});

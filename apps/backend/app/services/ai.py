@@ -39,3 +39,12 @@ async def performance_discrepancy_flags(self_review: dict, manager_review: dict)
         if self_review.get("overall") and manager_review.get("overall") and self_review["overall"] != manager_review["overall"]:
             flags["overall_mismatch"] = {"self": self_review["overall"], "manager": manager_review["overall"]}
     return flags
+
+
+async def rescore_candidate_ai(resume_text: str | None) -> tuple[float, str]:
+    """Re-score a candidate based on their resume text. Stub implementation."""
+    if not resume_text:
+        return 0.5, "No resume text available for rescoring."
+    # In production: call LLM with job criteria + resume
+    score = min(1.0, len(resume_text) / 5000)  # stub: longer resume = higher score
+    return round(score, 2), "Auto-rescored by AI orchestrator (stub)."

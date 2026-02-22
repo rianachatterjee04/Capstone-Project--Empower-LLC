@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi import Depends
+from app.db.deps import get_db
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.deps import get_db
@@ -22,7 +24,7 @@ async def health():
 # Checks database connectivity
 # ---------------------------------------------------------
 @router.get("/health/ready")
-async def readiness(db: AsyncSession = get_db()):
+async def readiness(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("select 1"))
         return {"status": "ready"}
@@ -35,7 +37,7 @@ async def readiness(db: AsyncSession = get_db()):
 # Used by admins / monitoring dashboards
 # ---------------------------------------------------------
 @router.get("/health/system")
-async def system_health(db: AsyncSession = get_db()):
+async def system_health(db: AsyncSession = Depends(get_db)):
     report = {
         "api": "ok",
         "database": "unknown",

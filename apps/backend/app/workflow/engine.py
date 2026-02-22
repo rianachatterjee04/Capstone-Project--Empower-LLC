@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.deps import get_db_session_internal
+from app.db.session import AsyncSessionLocal
 from app.org_ai.orchestrator_bridge import decide
 from app.workflow.router import route_action
 

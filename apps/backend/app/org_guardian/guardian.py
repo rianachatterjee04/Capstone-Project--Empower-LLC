@@ -1,5 +1,5 @@
 import asyncio
-from app.db.deps import get_db_session_internal
+from app.db.session import AsyncSessionLocal
 from .detectors import run_all_detectors
 from .notifier import notify_humans
 
@@ -14,7 +14,7 @@ async def guardian_loop():
 
     while True:
         try:
-            async with get_db_session_internal() as db:
+            async with AsyncSessionLocal() as db:
 
                 findings = await run_all_detectors(db)
 
@@ -25,4 +25,3 @@ async def guardian_loop():
             print("Guardian error:", e)
 
         await asyncio.sleep(SCAN_INTERVAL)
-

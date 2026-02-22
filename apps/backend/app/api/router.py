@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from app.api.routers.ai_internal import router as ai_internal
 from app.api.routers.health import router as health
 from app.api.routers.employees import router as employees
 from app.api.routers.onboarding import router as onboarding
@@ -25,6 +26,7 @@ from app.api.routers.benefits import router as benefits
 from app.api.routers.ats import router as ats
 
 api_router = APIRouter()
+api_router.include_router(ai_internal)
 api_router.include_router(health)
 api_router.include_router(employees)
 api_router.include_router(onboarding)

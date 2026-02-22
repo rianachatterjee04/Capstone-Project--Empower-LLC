@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Providers } from "@/components/Providers";
 import RealtimeBootstrap from "@/components/RealtimeBootstrap";
 import DecisionInbox from "@/components/DecisionInbox";
 
@@ -15,16 +16,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        {/* 🔴 Connects browser to org brain */}
-        <RealtimeBootstrap />
+        <Providers>
+          {/* 🔴 Connects browser to org brain */}
+          <RealtimeBootstrap />
 
-        {/* 🔴 Global approval / alert UI */}
-        <DecisionInbox />
+          {/* 🔴 Global approval / alert UI */}
+          <DecisionInbox />
 
-        {/* Existing application */}
-        {children}
+          {/* Application */}
+          {children}
+        </Providers>
       </body>
     </html>
   );
 }
-

@@ -1,3 +1,5 @@
+import Constants from "expo-constants";
+
 let socket: WebSocket | null = null;
 let reconnectTimer: any = null;
 let listeners: ((event: any) => void)[] = [];
@@ -7,22 +9,19 @@ function notify(event: any) {
 }
 
 export function connectRealtime(onEvent: (event: any) => void) {
-  // prevent duplicate listeners
   if (!listeners.includes(onEvent)) {
     listeners.push(onEvent);
   }
 
-  // already connected
   if (socket && socket.readyState === WebSocket.OPEN) return;
 
-  const url =
-    (process.env.NEXT_PUBLIC_API_WS ?? "ws://localhost:8000") + "/ws";
+  const apiBase: string = (Constants.expoConfig?.extra as any)?.apiBaseUrl ?? "http://localhost:8000/api";
+  const wsBase = apiBase.replace(/^http/, "ws").replace(/\/api$/, "");
+  const url = wsBase + "/ws";
 
   socket = new WebSocket(url);
 
-  socket.onopen = () => {
-    console.log("🧠 Foundry realtime connected");
-  };
+  socket.onopen = () => console.log("🧠 Foundry realtime connected");
 
   socket.onmessage = (msg) => {
     try {
@@ -35,7 +34,6 @@ export function connectRealtime(onEvent: (event: any) => void) {
 
   socket.onclose = () => {
     console.log("⚠️ realtime disconnected — retrying");
-
     if (reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
@@ -45,4 +43,3 @@ export function connectRealtime(onEvent: (event: any) => void) {
 
   socket.onerror = () => socket?.close();
 }
-

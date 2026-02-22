@@ -1,50 +1,72 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
+import { useEventStore } from "../state/eventsStore";
+import { respondToDecision } from "../services/decisions";
 
 export default function DecisionInbox() {
-  const [events, setEvents] = useState<any[]>([]);
+  const events = useEventStore((s: any) => s.events);
+  const remove = useEventStore((s: any) => s.remove);
 
-  useEffect(() => {
-    function handler(e: any) {
-      if (e.detail?.type === "decision_required") {
-        setEvents(prev => [e.detail, ...prev]);
-      }
-    }
+  const pending = events.filter((e: any) => e.type === "decision_required");
 
-    window.addEventListener("org-event", handler);
-    return () => window.removeEventListener("org-event", handler);
-  }, []);
-
-  if (!events.length) return null;
+  if (!pending.length) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 w-96 space-y-3 z-50">
-      {events.map((e, i) => (
-        <div key={i} className="bg-white border rounded-xl shadow-xl p-4">
-          <h3 className="font-bold text-lg">{e.title}</h3>
-          <p className="text-gray-600">{e.message}</p>
+    <View style={styles.container}>
+      <ScrollView>
+        {pending.map((e: any) => (
+          <View key={e.id} style={styles.card}>
+            <Text style={styles.title}>{e.title}</Text>
+            <Text style={styles.message}>{e.message}</Text>
 
-          <div className="flex gap-2 mt-4">
-            {e.actions?.map((a: any) => (
-              <button
-                key={a.id}
-                className="px-3 py-2 bg-black text-white rounded-lg"
-                onClick={() =>
-                  fetch("/api/decisions/respond", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ id: e.id, action: a.id })
-                  })
-                }
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
+            <View style={styles.actions}>
+              {e.actions?.map((a: any) => (
+                <Pressable
+                  key={a.id}
+                  style={styles.button}
+                  onPress={async () => {
+                    await respondToDecision(e.id, a.id);
+                    remove(e.id);
+                  }}
+                >
+                  <Text style={styles.buttonText}>{a.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
+const styles = StyleSheet.create({
+  container: {
+    position: "absolute",
+    bottom: 24,
+    right: 16,
+    left: 16,
+    zIndex: 50,
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  title: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
+  message: { color: "#555", marginBottom: 12 },
+  actions: { flexDirection: "row", gap: 8 },
+  button: {
+    backgroundColor: "#000",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  buttonText: { color: "#fff", fontWeight: "600" },
+});

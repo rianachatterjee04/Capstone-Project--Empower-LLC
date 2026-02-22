@@ -1,6 +1,36 @@
-version: "3.9"
 services:
-  redis:
-    image: redis:7
+  postgres:
+    image: postgres:16
+    container_name: empower-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     ports:
-      - "6379:6379"
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./apps/backend
+    container_name: empower-backend
+    env_file:
+      - ./apps/backend/.env
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/postgres
+
+  orchestrator:
+    build: ./apps/ai-orchestrator/ai-orchestrator-fixed
+    container_name: empower-orchestrator
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:8000
+      INTERNAL_AI_SHARED_SECRET: dev-internal-secret
+
+volumes:
+  pgdata:
