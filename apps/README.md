@@ -195,13 +195,28 @@ npm install
 npm install typescript@~5.3.3 @types/react@~18.2.79 --save-dev
 ```
 
+#### curl command to test-
+
+```bash
+curl -X POST http://localhost:8000/ws/test-broadcast \
+  -H "Content-Type: application/json" \
+  -d '{"id":"test-002","title":"Approve PTO Request","message":"Sarah Chen requesting 5 days off Mar 15-19.","actions":[{"id":"approve","label":"Approve"},{"id":"deny","label":"Deny"}]}'
+```
+
 ### Run
 
 ```bash
-npx expo start
+cd apps/mobile-exec/mobile-exec-fixed
+npx expo start --clear
 ```
 
 If 8081 is in use, Expo will prompt to use 8082.
+
+
+### Note-
+
+w — opens the app in your web browser at localhost:8081
+r — reloads the app (clears in-memory state like the decision cards, re-fetches all JS)
 
 ---
 
