@@ -1,58 +1,103 @@
 "use client";
+
 import { useState } from "react";
-import { apiFetch, apiPost } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
-import { Button } from "@/components/Button";
-import { Input } from "@/components/Input";
+import { apiPost } from "@/lib/api";
+
+type Provider = {
+  provider: string;
+  connected: boolean;
+};
+
+type GreenhouseConnectResponse = {
+  ok: boolean;
+  provider: string;
+  webhook_secret?: string;
+  sync_started?: boolean;
+};
+
+type LeverConnectResponse = {
+  ok: boolean;
+  provider: string;
+  oauth_url: string;
+};
 
 export default function IntegrationsPage() {
-  const providersQ = useQuery({ queryKey: ["int_providers"], queryFn: () => apiFetch<{ providers: string[] }>("/integrations/providers") });
+  const [greenhouseMessage, setGreenhouseMessage] = useState("");
+  const [leverUrl, setLeverUrl] = useState("");
+  const [providers, setProviders] = useState<Provider[]>([]);
 
-  const [ghKey, setGhKey] = useState("");
-  const [gh, setGh] = useState<any | null>(null);
+  async function loadProviders() {
+    const r = await fetch("http://localhost:8000/api/integrations/providers", {
+      headers: {
+        "x-org-id": "11111111-1111-1111-1111-111111111111",
+        "x-user-id": "22222222-2222-2222-2222-222222222222",
+        "x-role": "owner",
+      },
+      cache: "no-store",
+    });
 
-  const [leverUrl, setLeverUrl] = useState<string | null>(null);
+    const data: { items?: Provider[] } = await r.json();
+    setProviders(data.items || []);
+  }
 
   async function connectGreenhouse() {
-    const r = await apiPost("/integrations/connect/greenhouse", { api_key: ghKey });
-    setGh(r);
+    const r = await apiPost<GreenhouseConnectResponse>("/integrations/connect/greenhouse", {
+      api_key: "demo-greenhouse-api-key",
+    });
+
+    setGreenhouseMessage(
+      r.sync_started
+        ? "Greenhouse connected and initial sync started."
+        : "Greenhouse connected, but Temporal sync did not start locally."
+    );
   }
 
   async function connectLever() {
-    const r = await apiPost("/integrations/connect/lever", {});
+    const r = await apiPost<LeverConnectResponse>("/integrations/connect/lever", {});
     setLeverUrl(r.oauth_url);
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="text-2xl font-semibold">Integrations</div>
-        <div className="text-sm text-black/60">Greenhouse + Lever are now webhook-driven (no /run) with Temporal workflows.</div>
-        <div className="text-xs text-black/50 mt-1">Supported: {(providersQ.data?.providers ?? []).join(", ")}</div>
+      <div className="text-2xl font-semibold">Integrations</div>
+
+      <div className="flex gap-3">
+        <button className="border rounded px-4 py-2" onClick={loadProviders}>
+          Load providers
+        </button>
+        <button className="border rounded px-4 py-2" onClick={connectGreenhouse}>
+          Connect Greenhouse
+        </button>
+        <button className="border rounded px-4 py-2" onClick={connectLever}>
+          Connect Lever
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-2xl border border-black/10 p-4 space-y-3">
-          <div className="text-sm font-semibold">Greenhouse (Harvest)</div>
-          <Input label="Harvest API Key" value={ghKey} onChange={(e) => setGhKey(e.target.value)} />
-          <Button onClick={connectGreenhouse}>Connect Greenhouse</Button>
-          {gh && (
-            <div className="text-xs text-black/60 space-y-1">
-              <div>Webhook secret: <span className="font-mono">{gh.webhook_secret}</span></div>
-              <div>Webhook URL: <span className="font-mono">{gh.webhook_url}</span></div>
-            </div>
-          )}
-        </div>
+      {greenhouseMessage && (
+        <div className="rounded border p-3 text-sm">{greenhouseMessage}</div>
+      )}
 
-        <div className="rounded-2xl border border-black/10 p-4 space-y-3">
-          <div className="text-sm font-semibold">Lever (OAuth)</div>
-          <Button onClick={connectLever}>Generate OAuth URL</Button>
-          {leverUrl && (
-            <div className="text-xs">
-              <div>Open OAuth URL:</div>
-              <a className="underline break-all" href={leverUrl} target="_blank" rel="noreferrer">{leverUrl}</a>
-              <div className="mt-2 text-black/50">After OAuth, callback returns webhook URL + secret.</div>
-            </div>
+      {leverUrl && (
+        <div className="rounded border p-3 text-sm break-all">
+          <div className="font-medium mb-1">Lever OAuth URL</div>
+          <a className="underline" href={leverUrl} target="_blank" rel="noreferrer">
+            {leverUrl}
+          </a>
+        </div>
+      )}
+
+      <div className="rounded border p-4">
+        <div className="font-medium mb-2">Providers</div>
+        <div className="space-y-2">
+          {providers.length === 0 ? (
+            <div className="text-sm text-black/60">No providers loaded yet.</div>
+          ) : (
+            providers.map((p) => (
+              <div key={p.provider} className="flex items-center justify-between">
+                <span>{p.provider}</span>
+                <span>{p.connected ? "Connected" : "Not connected"}</span>
+              </div>
+            ))
           )}
         </div>
       </div>

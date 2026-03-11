@@ -45,3 +45,12 @@ async def realtime_socket(ws: WebSocket):
         subscribers.discard(ws)
         logger.error(f"WebSocket error: {e}")
 
+
+from pydantic import BaseModel
+from fastapi import Body
+
+@router.post("/ws/test-broadcast")
+async def test_broadcast(payload: dict = Body(...)):
+    from app.realtime.bus import publish
+    await publish("decision", payload)
+    return {"ok": True, "subscribers": len(subscribers)}

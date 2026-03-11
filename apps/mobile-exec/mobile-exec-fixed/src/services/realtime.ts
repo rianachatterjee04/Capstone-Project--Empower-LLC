@@ -17,7 +17,10 @@ export function connectRealtime(onEvent: (event: any) => void) {
 
   const apiBase: string = (Constants.expoConfig?.extra as any)?.apiBaseUrl ?? "http://localhost:8000/api";
   const wsBase = apiBase.replace(/^http/, "ws").replace(/\/api$/, "");
-  const url = wsBase + "/ws";
+
+  // Dev token: dev:<org_id>:<role>:<email>:<user_id>
+  const token = "dev:11111111-1111-1111-1111-111111111111:owner:dev@local.test:22222222-2222-2222-2222-222222222222";
+  const url = `${wsBase}/ws?token=${encodeURIComponent(token)}`;
 
   socket = new WebSocket(url);
 
@@ -26,6 +29,8 @@ export function connectRealtime(onEvent: (event: any) => void) {
   socket.onmessage = (msg) => {
     try {
       const data = JSON.parse(msg.data);
+      // ignore meta messages like connected/subscribed/pong
+      if (data.type === "connected" || data.type === "subscribed") return;
       notify(data);
     } catch (e) {
       console.error("Invalid realtime payload", e);

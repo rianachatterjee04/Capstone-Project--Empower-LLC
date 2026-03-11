@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, timedelta
+from app.core.json_utils import json_safe
 import uuid
 
 from app.api.deps import require_internal_ai

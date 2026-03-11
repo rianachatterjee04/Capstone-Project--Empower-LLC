@@ -1,12 +1,17 @@
 import { useEffect } from "react";
 import { connectRealtime } from "../services/realtime";
-import { useEventStore } from "../state/eventsStore";
+import { useEventsStore, type RealtimeEvent } from "../state/eventsStore";
 
 export function useRealtime() {
-  const push = useEventStore((s:any) => s.push);
+  const push = useEventsStore((s) => s.push);
 
   useEffect(() => {
-    connectRealtime(push);
-  }, []);
-}
+    const unsubscribe = connectRealtime((event: RealtimeEvent) => {
+      push(event);
+    }) as void | (() => void);
 
+    return () => {
+      unsubscribe?.();
+    };
+  }, [push]);
+}

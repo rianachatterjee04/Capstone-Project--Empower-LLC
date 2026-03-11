@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi import Depends
 from app.db.deps import get_db
+from app.core.json_utils import json_safe
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.deps import get_db

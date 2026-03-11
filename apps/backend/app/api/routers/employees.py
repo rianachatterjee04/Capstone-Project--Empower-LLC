@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
+from app.core.json_utils import json_safe
 from uuid import UUID
 from datetime import date
 
@@ -117,7 +118,7 @@ async def assign_manager(employee_id: str, manager_id: str, actor: Actor = Depen
 
     await db.execute(text("""
         update public.employees
-        set manager_id=:manager
+        set manager_employee_id=:manager
         where id=:emp and org_id=:org
     """), {"manager": manager_id, "emp": employee_id, "org": actor.org_id})
 
@@ -224,13 +225,12 @@ async def rehire(employee_id: str, actor: Actor = Depends(require_org), db: Asyn
 async def org_tree(actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
 
     rows = (await db.execute(text("""
-        select id, manager_id, first_name, last_name
+        select id, manager_employee_id, legal_name
         from public.employees
         where org_id=:org
     """), {"org": actor.org_id})).fetchall()
 
     return [
-        {"id": str(r[0]), "manager_id": str(r[1]) if r[1] else None, "name": f"{r[2]} {r[3]}"}
+        {"id": str(r[0]), "manager_id": str(r[1]) if r[1] else None, "name": r[2]}
         for r in rows
     ]
-

@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
+from app.core.json_utils import json_safe
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 

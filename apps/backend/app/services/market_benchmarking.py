@@ -2,50 +2,169 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any
 from uuid import UUID
+from decimal import Decimal
+from datetime import datetime
+import json
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
+
 @dataclass
 class Benchmark:
-    source: str
+    provider: str
     job_title: str
     location: str | None
     currency: str
-    p25: float | None
     p50: float | None
     p75: float | None
+    p90: float | None
+
 
 class MarketProvider:
     name: str = "base"
+
     async def fetch(self, job_title: str, location: str | None, currency: str = "USD") -> Benchmark:
         raise NotImplementedError
 
+
 class SalaryDotComProvider(MarketProvider):
     name = "salary.com"
+
     async def fetch(self, job_title: str, location: str | None, currency: str = "USD") -> Benchmark:
-        # TODO: Wire Salary.com with an API key / partner feed
-        return Benchmark(source=self.name, job_title=job_title, location=location, currency=currency, p25=None, p50=None, p75=None)
+        return Benchmark(
+            provider=self.name,
+            job_title=job_title,
+            location=location,
+            currency=currency,
+            p50=None,
+            p75=None,
+            p90=None,
+        )
+
 
 class MockProvider(MarketProvider):
     name = "mock"
+
     async def fetch(self, job_title: str, location: str | None, currency: str = "USD") -> Benchmark:
         base = float(abs(hash((job_title, location, currency))) % 150000 + 50000)
-        return Benchmark(source=self.name, job_title=job_title, location=location, currency=currency, p25=base*0.85, p50=base, p75=base*1.15)
+        return Benchmark(
+            provider=self.name,
+            job_title=job_title,
+            location=location,
+            currency=currency,
+            p50=base,
+            p75=base * 1.15,
+            p90=base * 1.30,
+        )
 
-PROVIDERS: Dict[str, MarketProvider] = {"salary.com": SalaryDotComProvider(), "mock": MockProvider()}
 
-async def capture_benchmark(db: AsyncSession, org_id: UUID, provider: str, job_title: str, location: str | None, currency: str = "USD") -> Dict[str, Any]:
+PROVIDERS: Dict[str, MarketProvider] = {
+    "salary.com": SalaryDotComProvider(),
+    "mock": MockProvider(),
+}
+
+
+def json_safe(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [json_safe(v) for v in value]
+    return value
+
+
+async def capture_benchmark(
+    db: AsyncSession,
+    org_id: UUID,
+    provider: str,
+    job_title: str,
+    location: str | None,
+    currency: str = "USD",
+) -> Dict[str, Any]:
     prov = PROVIDERS.get(provider)
     if not prov:
         raise ValueError("Unknown provider")
+
     b = await prov.fetch(job_title, location, currency)
-    res = await db.execute(text("""
-        insert into public.market_benchmarks(org_id, source, job_title, location, currency, p25, p50, p75, captured_at)
-        values (:org_id, :source, :job_title, :location, :currency, :p25, :p50, :p75, now())
-        returning id
-    """), {
-        "org_id": str(org_id), "source": b.source, "job_title": b.job_title, "location": b.location,
-        "currency": b.currency, "p25": b.p25, "p50": b.p50, "p75": b.p75
-    })
-    bid = res.first()[0]
-    return {"id": str(bid), **b.__dict__}
+
+    raw_payload = {
+        "provider": b.provider,
+        "job_title": b.job_title,
+        "location": b.location,
+        "currency": b.currency,
+        "benchmark_data": {
+            "p50": b.p50,
+            "p75": b.p75,
+            "p90": b.p90,
+        },
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+    res = await db.execute(
+        text("""
+            insert into public.market_benchmarks(
+                id,
+                org_id,
+                provider,
+                job_title,
+                location,
+                currency,
+                p50,
+                p75,
+                p90,
+                raw_payload,
+                captured_at,
+                created_at
+            )
+            values (
+                gen_random_uuid(),
+                :org_id,
+                :provider,
+                :job_title,
+                :location,
+                :currency,
+                :p50,
+                :p75,
+                :p90,
+                cast(:raw_payload as jsonb),
+                now(),
+                now()
+            )
+            returning
+                id,
+                org_id,
+                provider,
+                job_title,
+                location,
+                currency,
+                p50,
+                p75,
+                p90,
+                raw_payload,
+                captured_at,
+                created_at
+        """),
+        {
+            "org_id": org_id,
+            "provider": b.provider,
+            "job_title": b.job_title,
+            "location": b.location,
+            "currency": b.currency,
+            "p50": b.p50,
+            "p75": b.p75,
+            "p90": b.p90,
+            "raw_payload": json.dumps(raw_payload),
+        },
+    )
+
+    row = res.mappings().first()
+    if not row:
+        raise RuntimeError("Failed to insert market benchmark")
+
+    return json_safe(dict(row))

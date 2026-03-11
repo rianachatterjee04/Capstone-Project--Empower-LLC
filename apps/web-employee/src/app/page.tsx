@@ -7,7 +7,7 @@ import { Input } from "@/components/Input";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"magic"|"password">("magic");
+  const [mode, setMode] = useState<"magic" | "password">("magic");
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export default function LoginPage() {
     setStatus(null);
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin + "/app" },
+      options: { emailRedirectTo: window.location.origin + "/auth/callback" },
     });
     setStatus(error ? error.message : "Check your email for the login link.");
   }
@@ -40,13 +40,13 @@ export default function LoginPage() {
 
         <div className="mt-6 flex gap-2">
           <button
-            className={`rounded-xl px-3 py-2 text-sm border ${mode==="magic" ? "bg-black text-white border-black" : "border-black/15 hover:bg-black/5"}`}
+            className={`rounded-xl px-3 py-2 text-sm border ${mode === "magic" ? "bg-black text-white border-black" : "border-black/15 hover:bg-black/5"}`}
             onClick={() => setMode("magic")}
           >
             Magic link
           </button>
           <button
-            className={`rounded-xl px-3 py-2 text-sm border ${mode==="password" ? "bg-black text-white border-black" : "border-black/15 hover:bg-black/5"}`}
+            className={`rounded-xl px-3 py-2 text-sm border ${mode === "password" ? "bg-black text-white border-black" : "border-black/15 hover:bg-black/5"}`}
             onClick={() => setMode("password")}
           >
             Password
@@ -55,10 +55,10 @@ export default function LoginPage() {
 
         <div className="mt-4 space-y-3">
           <Input label="Email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
-          {mode==="password" ? (
+          {mode === "password" ? (
             <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           ) : null}
-          {mode==="magic" ? (
+          {mode === "magic" ? (
             <Button onClick={signInMagic} disabled={!email}>Send magic link</Button>
           ) : (
             <Button onClick={signInPassword} disabled={!email || !password}>Sign in</Button>

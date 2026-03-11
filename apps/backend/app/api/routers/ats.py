@@ -1,37 +1,146 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from uuid import UUID
 import json
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_org, db_session, Actor
+from app.core.json_utils import json_safe
 from app.db.models import AuditEvent
 
 router = APIRouter(prefix="/ats", tags=["ats"])
 
 
-# =========================================================
-# STAGE MAPPINGS (External ATS → Foundry stages)
-# =========================================================
-@router.get("/mappings/{provider}")
-async def list_mappings(provider: str, actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
-    rows = (await db.execute(text("""
-        select external_stage, internal_stage
-        from public.ats_stage_mappings
-        where org_id=:org_id and provider=:provider
-        order by external_stage asc
-    """), {"org_id": actor.org_id, "provider": provider})).fetchall()
+def as_uuid(value) -> UUID | None:
+    if value is None:
+        return None
+    if isinstance(value, UUID):
+        return value
+    return UUID(str(value))
 
-    return {"items": [{"external_stage": r[0], "internal_stage": r[1]} for r in rows]}
+
+async def table_exists(db: AsyncSession, table_name: str) -> bool:
+    result = await db.execute(
+        text("select to_regclass(:table_name)"),
+        {"table_name": f"public.{table_name}"},
+    )
+    return result.scalar() is not None
+
+
+@router.get("/providers")
+async def providers(
+    actor: Actor = Depends(require_org),
+    db: AsyncSession = Depends(db_session),
+):
+    org_id = as_uuid(actor.org_id)
+    if org_id is None:
+        raise HTTPException(status_code=400, detail="Missing org_id")
+
+    connected = {"greenhouse": False, "lever": False}
+
+    if await table_exists(db, "integrations"):
+        rows = (
+            await db.execute(
+                text("""
+                    select provider, status
+                    from public.integrations
+                    where org_id = :org_id
+                      and provider in ('greenhouse', 'lever')
+                """),
+                {"org_id": org_id},
+            )
+        ).fetchall()
+
+        for provider, status in rows:
+            connected[str(provider)] = str(status).lower() in ("connected", "active", "ok")
+
+    return {
+        "items": [
+            {"provider": "greenhouse", "connected": connected["greenhouse"]},
+            {"provider": "lever", "connected": connected["lever"]},
+        ]
+    }
+
+
+@router.post("/publish")
+async def publish_job(
+    payload: dict,
+    actor: Actor = Depends(require_org),
+    db: AsyncSession = Depends(db_session),
+):
+    if actor.role not in ("owner", "admin", "hr", "manager"):
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    provider = payload.get("provider")
+    job_id = payload.get("job_id")
+    title = payload.get("title")
+
+    if not provider:
+        raise HTTPException(status_code=400, detail="provider required")
+    if provider not in ("greenhouse", "lever"):
+        raise HTTPException(status_code=400, detail="invalid provider")
+    if not job_id and not title:
+        raise HTTPException(status_code=400, detail="job_id or title required")
+
+    return {
+        "published": True,
+        "provider": provider,
+        "job_id": job_id,
+        "title": title,
+        "mode": "stub",
+    }
+
+
+@router.get("/mappings/{provider}")
+async def list_mappings(
+    provider: str,
+    actor: Actor = Depends(require_org),
+    db: AsyncSession = Depends(db_session),
+):
+    org_id = as_uuid(actor.org_id)
+    if org_id is None:
+        raise HTTPException(status_code=400, detail="Missing org_id")
+
+    if not await table_exists(db, "ats_stage_mappings"):
+        return {"items": []}
+
+    rows = (
+        await db.execute(
+            text("""
+                select external_stage, internal_stage
+                from public.ats_stage_mappings
+                where org_id = :org_id and provider = :provider
+                order by external_stage asc
+            """),
+            {"org_id": org_id, "provider": provider},
+        )
+    ).fetchall()
+
+    return {
+        "items": [
+            {"external_stage": r[0], "internal_stage": r[1]}
+            for r in rows
+        ]
+    }
 
 
 @router.post("/mappings/{provider}")
-async def upsert_mapping(provider: str, payload: dict, actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
-
-    if actor.role not in ("owner","admin","hr"):
+async def upsert_mapping(
+    provider: str,
+    payload: dict,
+    actor: Actor = Depends(require_org),
+    db: AsyncSession = Depends(db_session),
+):
+    if actor.role not in ("owner", "admin", "hr"):
         raise HTTPException(status_code=403, detail="Not allowed")
+
+    org_id = as_uuid(actor.org_id)
+    user_id = as_uuid(actor.user_id)
+    if org_id is None:
+        raise HTTPException(status_code=400, detail="Missing org_id")
 
     ext = payload.get("external_stage")
     inte = payload.get("internal_stage")
@@ -39,132 +148,64 @@ async def upsert_mapping(provider: str, payload: dict, actor: Actor = Depends(re
     if not ext or not inte:
         raise HTTPException(status_code=400, detail="external_stage and internal_stage required")
 
-    await db.execute(text("""
-        insert into public.ats_stage_mappings(org_id, provider, external_stage, internal_stage, updated_at)
-        values (:org_id, :provider, :ext, :int, now())
-        on conflict (org_id, provider, external_stage)
-        do update set internal_stage=excluded.internal_stage, updated_at=now()
-    """), {"org_id": actor.org_id, "provider": provider, "ext": ext, "int": inte})
+    if not await table_exists(db, "ats_stage_mappings"):
+        raise HTTPException(
+            status_code=503,
+            detail="ats_stage_mappings table is not available yet. Run the ATS migration first.",
+        )
+
+    await db.execute(
+        text("""
+            insert into public.ats_stage_mappings(
+                org_id,
+                provider,
+                external_stage,
+                internal_stage,
+                updated_at
+            )
+            values (
+                :org_id,
+                :provider,
+                :external_stage,
+                :internal_stage,
+                now()
+            )
+            on conflict (org_id, provider, external_stage)
+            do update set
+                internal_stage = excluded.internal_stage,
+                updated_at = now()
+        """),
+        {
+            "org_id": org_id,
+            "provider": provider,
+            "external_stage": ext,
+            "internal_stage": inte,
+        },
+    )
+
+    db.add(
+        AuditEvent(
+            org_id=org_id,
+            actor_user_id=user_id,
+            actor_role=actor.role,
+            event_type="ats.mapping_upserted",
+            entity_type="ats_stage_mapping",
+            entity_id=None,
+            payload=json_safe(
+                {
+                    "provider": provider,
+                    "external_stage": ext,
+                    "internal_stage": inte,
+                }
+            ),
+        )
+    )
 
     await db.commit()
-    return {"ok": True}
-
-
-# =========================================================
-# AI SCREENING CRITERIA
-# =========================================================
-@router.get("/criteria/{provider}/{job_external_id}")
-async def get_criteria(provider: str, job_external_id: str, actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
-
-    row = (await db.execute(text("""
-        select criteria
-        from public.ats_job_screening_criteria
-        where org_id=:org_id and provider=:provider and job_external_id=:jid
-    """), {"org_id": actor.org_id, "provider": provider, "jid": job_external_id})).first()
-
-    return {"criteria": row[0] if row else {}}
-
-
-@router.post("/criteria/{provider}/{job_external_id}")
-async def set_criteria(provider: str, job_external_id: str, payload: dict, actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
-
-    if actor.role not in ("owner","admin","hr","manager"):
-        raise HTTPException(status_code=403, detail="Not allowed")
-
-    criteria = payload.get("criteria") or {}
-
-    await db.execute(text("""
-        insert into public.ats_job_screening_criteria(org_id, provider, job_external_id, criteria, updated_at)
-        values (:org_id, :provider, :jid, :criteria::jsonb, now())
-        on conflict (org_id, provider, job_external_id)
-        do update set criteria=excluded.criteria, updated_at=now()
-    """), {"org_id": actor.org_id, "provider": provider, "jid": job_external_id, "criteria": json.dumps(criteria)})
-
-    await db.commit()
-    return {"ok": True}
-
-
-# =========================================================
-# SCREENING SCORES
-# =========================================================
-@router.get("/scores/{provider}/{candidate_external_id}")
-async def scores(provider: str, candidate_external_id: str, actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
-
-    rows = (await db.execute(text("""
-        select job_external_id, score, rationale, created_at
-        from public.ats_screening_scores
-        where org_id=:org_id and provider=:provider and candidate_external_id=:cid
-        order by created_at desc
-        limit 10
-    """), {"org_id": actor.org_id, "provider": provider, "cid": candidate_external_id})).fetchall()
 
     return {
-        "items": [
-            {
-                "job_external_id": r[0],
-                "score": float(r[1]),
-                "rationale": r[2],
-                "created_at": str(r[3])
-            }
-            for r in rows
-        ]
+        "ok": True,
+        "provider": provider,
+        "external_stage": ext,
+        "internal_stage": inte,
     }
-
-
-# =========================================================
-# HIRING DECISION (SYSTEM OF RECORD)
-# =========================================================
-@router.post("/decision/{candidate_id}")
-async def record_decision(candidate_id: str, payload: dict, actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
-
-    if actor.role not in ("owner","admin","hr","manager"):
-        raise HTTPException(status_code=403, detail="Not allowed")
-
-    decision = payload.get("decision")  # hire / reject / hold
-    rationale = payload.get("rationale")
-    job_id = payload.get("job_id")
-
-    if decision not in ("hire","reject","hold"):
-        raise HTTPException(status_code=400, detail="invalid decision")
-
-    await db.execute(text("""
-        insert into public.hiring_decisions(org_id, candidate_id, job_id, decision, rationale, decided_by)
-        values (:org_id, :cid, :job_id, :decision, :rationale, :actor)
-    """), {
-        "org_id": actor.org_id,
-        "cid": candidate_id,
-        "job_id": job_id,
-        "decision": decision,
-        "rationale": rationale,
-        "actor": actor.user_id
-    })
-
-    db.add(AuditEvent(
-        org_id=UUID(actor.org_id),
-        actor_user_id=UUID(actor.user_id),
-        actor_role=actor.role,
-        event_type="hiring.decision",
-        entity_type="candidate",
-        entity_id=UUID(candidate_id),
-        payload=payload
-    ))
-
-    await db.commit()
-    return {"recorded": True}
-
-
-# =========================================================
-# HIRING FREEZE ENFORCEMENT
-# =========================================================
-@router.get("/freeze-status")
-async def freeze_status(actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
-
-    row = (await db.execute(text("""
-        select is_frozen, reason
-        from public.hiring_freeze
-        where org_id=:org_id
-        limit 1
-    """), {"org_id": actor.org_id})).first()
-
-    return {"frozen": row[0], "reason": row[1]} if row else {"frozen": False}
-

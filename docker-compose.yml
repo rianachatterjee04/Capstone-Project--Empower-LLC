@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     container_name: empower-postgres
     environment:
       POSTGRES_USER: postgres
@@ -10,14 +10,22 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck: # <--- Ensures the DB is fully ready before others start
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./apps/backend
     container_name: empower-backend
+    volumes:
+      - ./apps/backend:/app  # <--- CRITICAL: Maps code into container
     env_file:
       - ./apps/backend/.env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy # <--- Backend waits for Postgres to be 'ready'
     ports:
       - "8000:8000"
     environment:

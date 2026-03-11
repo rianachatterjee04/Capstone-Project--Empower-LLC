@@ -1,4 +1,7 @@
 from __future__ import annotations
+from sqlalchemy import Column, Text, Numeric, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+import uuid
 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import (
@@ -15,6 +18,26 @@ class Base(DeclarativeBase):
     pass
 
 
+
+
+class MarketBenchmark(Base):
+    __tablename__ = "market_benchmarks"
+    __table_args__ = {"schema": "public"}
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    provider = Column(Text, nullable=False)
+    job_title = Column(Text, nullable=False)
+    location = Column(Text, nullable=True)
+    currency = Column(Text, nullable=False, default="USD")
+    p50 = Column(Numeric, nullable=True)
+    p75 = Column(Numeric, nullable=True)
+    p90 = Column(Numeric, nullable=True)
+    raw_payload = Column(JSONB, nullable=True)
+    captured_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 # =========================
 # ORG
 # =========================
@@ -25,6 +48,7 @@ class Org(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
 
 # =========================
 # AUDIT EVENT
@@ -71,6 +95,53 @@ class AuditEvent(Base):
         nullable=False,
     )
 
+
+# =========================
+# VIEW EVENT
+# =========================
+class ViewEvent(Base):
+    __tablename__ = "view_events"
+    __table_args__ = {"schema": "public"}
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("public.orgs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
+
+    actor_role: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    path: Mapped[str] = mapped_column(String, nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+    )
+
+    meta: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
 # =========================
 # ESCALATION RULE
 # =========================
@@ -116,6 +187,7 @@ class EscalationRule(Base):
         server_default=func.now(),
         nullable=False,
     )
+
 
 # =========================
 # ESCALATION
@@ -178,6 +250,7 @@ class Escalation(Base):
         nullable=False,
     )
 
+
 # =========================
 # POLICY
 # =========================
@@ -223,6 +296,7 @@ class Policy(Base):
         server_default=func.now(),
         nullable=False,
     )
+
 
 # =========================
 # EMPLOYEE

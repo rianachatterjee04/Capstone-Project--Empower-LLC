@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Dict, Any
 
 
@@ -15,11 +17,6 @@ class SalaryDotComClient:
         job_title: str,
         location: str,
     ) -> Dict[str, Any]:
-        """
-        Simulate salary band lookup.
-        """
-
-        # Fake data for now
         return {
             "job_title": job_title,
             "location": location,
@@ -28,4 +25,20 @@ class SalaryDotComClient:
             "mid": 110000,
             "max": 130000,
             "source": "salary.com (stub)",
+        }
+
+    async def get_salary_range(
+        self,
+        title: str,
+        location: str,
+    ) -> Dict[str, Any]:
+        band = await self.get_salary_band(title, location)
+        return {
+            "title": band["job_title"],
+            "location": band["location"],
+            "currency": band["currency"],
+            "min": band["min"],
+            "mid": band["mid"],
+            "max": band["max"],
+            "source": band["source"],
         }

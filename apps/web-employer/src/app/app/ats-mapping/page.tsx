@@ -1,57 +1,86 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch, apiPost } from "@/lib/api";
-import { Button } from "@/components/Button";
-import { Input } from "@/components/Input";
+
+type Mapping = {
+  external_stage: string;
+  internal_stage: string;
+};
+
+type MappingsResponse = {
+  items: Mapping[];
+};
 
 export default function ATSMappingPage() {
   const [provider, setProvider] = useState("greenhouse");
-  const [mappings, setMappings] = useState<any[]>([]);
-  const [ext, setExt] = useState("");
-  const [inte, setInte] = useState("Phone Screen");
+  const [externalStage, setExternalStage] = useState("");
+  const [internalStage, setInternalStage] = useState("");
+  const [mappings, setMappings] = useState<Mapping[]>([]);
 
-  async function load() {
-    const r = await apiFetch(`/ats/mappings/${provider}`);
+  const load = useCallback(async () => {
+    const r = await apiFetch<MappingsResponse>(`/ats/mappings/${provider}`);
     setMappings(r.items || []);
-  }
+  }, [provider]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function save() {
-    await apiPost(`/ats/mappings/${provider}`, { external_stage: ext, internal_stage: inte });
-    setExt("");
+    await apiPost(`/ats/mappings/${provider}`, {
+      external_stage: externalStage,
+      internal_stage: internalStage,
+    });
+
+    setExternalStage("");
+    setInternalStage("");
     await load();
   }
 
-  async function replay() {
-    await apiPost(`/integrations/replay/${provider}`, {});
-    alert("Replay started (Temporal workflow).");
-  }
-
-  useEffect(() => { load(); }, [provider]);
-
   return (
     <div className="space-y-6">
-      <div>
-        <div className="text-2xl font-semibold">ATS Mapping + AI Screening</div>
-        <div className="text-sm text-black/60">
-          Map external stages to your internal pipeline, then AI-screen candidates with decision lineage.
-        </div>
+      <div className="text-2xl font-semibold">ATS Stage Mapping</div>
+
+      <div className="flex gap-3">
+        <select
+          className="border rounded px-3 py-2"
+          value={provider}
+          onChange={(e) => setProvider(e.target.value)}
+        >
+          <option value="greenhouse">Greenhouse</option>
+          <option value="lever">Lever</option>
+        </select>
+
+        <input
+          className="border rounded px-3 py-2"
+          placeholder="External stage"
+          value={externalStage}
+          onChange={(e) => setExternalStage(e.target.value)}
+        />
+
+        <input
+          className="border rounded px-3 py-2"
+          placeholder="Internal stage"
+          value={internalStage}
+          onChange={(e) => setInternalStage(e.target.value)}
+        />
+
+        <button
+          className="border rounded px-4 py-2"
+          onClick={save}
+        >
+          Save
+        </button>
       </div>
 
-      <div className="rounded-2xl border border-black/10 p-4 space-y-3">
-        <Input label="Provider (greenhouse or lever)" value={provider} onChange={(e) => setProvider(e.target.value)} />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Input label="External stage" value={ext} onChange={(e) => setExt(e.target.value)} />
-          <Input label="Internal stage" value={inte} onChange={(e) => setInte(e.target.value)} />
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={save}>Save mapping</Button>
-          <Button onClick={replay}>Replay events</Button>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-black/10 p-4">
-        <div className="text-sm font-semibold">Current mappings</div>
-        <pre className="mt-3 text-xs bg-black/5 rounded-xl p-3 overflow-auto">{JSON.stringify(mappings, null, 2)}</pre>
+      <div className="space-y-2">
+        {mappings.map((m, i) => (
+          <div key={`${m.external_stage}-${m.internal_stage}-${i}`} className="border rounded p-3">
+            <div><strong>External:</strong> {m.external_stage}</div>
+            <div><strong>Internal:</strong> {m.internal_stage}</div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 "use client";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getUserContext, signOut, type AppRole } from "@/lib/auth";
@@ -6,191 +7,26 @@ import { getUserContext, signOut, type AppRole } from "@/lib/auth";
 type NavItem = { href: string; label: string; roles: AppRole[] };
 
 const NAV: NavItem[] = [
-  {
-    "href": "/app",
-    "label": "Dashboard",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager",
-      "employee"
-    ]
-  },
-  {
-    "href": "/app/org",
-    "label": "Org Tree",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager"
-    ]
-  },
-  {
-    "href": "/app/onboarding",
-    "label": "Onboarding",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager",
-      "employee"
-    ]
-  },
-  {
-    "href": "/app/cases",
-    "label": "Reports",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager",
-      "employee"
-    ]
-  },
-  {
-    "href": "/app/recruiting",
-    "label": "Recruiting",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager"
-    ]
-  },
-  {
-    "href": "/app/policies",
-    "label": "Policies",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/escalations",
-    "label": "Escalations",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager"
-    ]
-  },
-  {
-    "href": "/app/documents",
-    "label": "Documents",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager",
-      "employee"
-    ]
-  },
-  {
-    "href": "/app/ai",
-    "label": "AI Memory",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/market",
-    "label": "Market Data",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/bonuses",
-    "label": "Bonuses",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/benefits",
-    "label": "Benefits",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/verification",
-    "label": "Verification",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/audit",
-    "label": "Audit Views",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/ats",
-    "label": "ATS Syndication",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager"
-    ]
-  },
-  {
-    "href": "/app/cfo",
-    "label": "CFO Modeling",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager"
-    ]
-  },
-  {
-    "href": "/app/integrations",
-    "label": "Integrations",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/policies-exec",
-    "label": "Policy Execution",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  },
-  {
-    "href": "/app/ats-mapping",
-    "label": "ATS Mapping + Screening",
-    "roles": [
-      "owner",
-      "admin",
-      "hr"
-    ]
-  }
-] as any;
+  { href: "/app", label: "Dashboard", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/org", label: "Org Tree", roles: ["owner", "admin", "hr", "manager"] },
+  { href: "/app/onboarding", label: "Onboarding", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/cases", label: "Reports", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/recruiting", label: "Recruiting", roles: ["owner", "admin", "hr", "manager"] },
+  { href: "/app/policies", label: "Policies", roles: ["owner", "admin", "hr"] },
+  { href: "/app/escalations", label: "Escalations", roles: ["owner", "admin", "hr", "manager"] },
+  { href: "/app/documents", label: "Documents", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/ai", label: "AI Memory", roles: ["owner", "admin", "hr"] },
+  { href: "/app/market", label: "Market Data", roles: ["owner", "admin", "hr"] },
+  { href: "/app/bonuses", label: "Bonuses", roles: ["owner", "admin", "hr"] },
+  { href: "/app/benefits", label: "Benefits", roles: ["owner", "admin", "hr"] },
+  { href: "/app/verification", label: "Verification", roles: ["owner", "admin", "hr"] },
+  { href: "/app/audit", label: "Audit Views", roles: ["owner", "admin", "hr"] },
+  { href: "/app/ats", label: "ATS Syndication", roles: ["owner", "admin", "hr", "manager"] },
+  { href: "/app/cfo", label: "CFO Modeling", roles: ["owner", "admin", "hr", "manager"] },
+  { href: "/app/integrations", label: "Integrations", roles: ["owner", "admin", "hr"] },
+  { href: "/app/policies-exec", label: "Policy Execution", roles: ["owner", "admin", "hr"] },
+  { href: "/app/ats-mapping", label: "ATS Mapping + Screening", roles: ["owner", "admin", "hr"] },
+];
 
 export function Sidebar() {
   const [role, setRole] = useState<AppRole>("employee");
@@ -214,7 +50,11 @@ export function Sidebar() {
 
       <nav className="space-y-1">
         {items.map((item) => (
-          <Link key={item.href} href={item.href} className="block rounded-xl px-3 py-2 text-sm hover:bg-black/5">
+          <Link
+            key={item.href}
+            href={item.href}
+            className="block rounded-xl px-3 py-2 text-sm hover:bg-black/5"
+          >
             {item.label}
           </Link>
         ))}

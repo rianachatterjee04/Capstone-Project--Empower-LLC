@@ -1,57 +1,121 @@
 "use client";
+
 import { useMemo, useState } from "react";
-import { apiFetch, apiPost } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
-import { Input } from "@/components/Input";
-import { Button } from "@/components/Button";
+import { apiPost } from "@/lib/api";
+
+type ScenarioResponse = {
+  future_headcount: number;
+  salary_cost: number;
+  benefits_cost: number;
+  bonus_cost: number;
+  total_annual_cost: number;
+  monthly_burn: number;
+  runway_months: number | null;
+};
 
 export default function CFOPage() {
-  const summary = useQuery({ queryKey: ["cfo_summary"], queryFn: () => apiFetch<{ headcount: number }>("/cfo/org-summary") });
-
   const [current, setCurrent] = useState(0);
-  const [hires, setHires] = useState(10);
-  const [attrition, setAttrition] = useState(0.1);
+  const [plannedHires, setPlannedHires] = useState(10);
+  const [attritionRate, setAttritionRate] = useState(0.1);
   const [avgSalary, setAvgSalary] = useState(120000);
-  const [result, setResult] = useState<{ future_headcount: number; annual_payroll: number } | null>(null);
+  const [cashAvailable, setCashAvailable] = useState(0);
 
-  useMemo(() => {
-    if (summary.data?.headcount != null && current === 0) setCurrent(summary.data.headcount);
-  }, [summary.data?.headcount]);
+  const [result, setResult] = useState<ScenarioResponse | null>(null);
+
+  const projectedHeadcount = useMemo(() => {
+    return current + plannedHires - Math.floor(current * attritionRate);
+  }, [current, plannedHires, attritionRate]);
 
   async function run() {
-    const r = await apiPost("/cfo/scenario", {
+    const r = await apiPost<ScenarioResponse>("/cfo/scenario", {
       current_headcount: current,
-      planned_hires: hires,
-      attrition_rate: attrition,
+      planned_hires: plannedHires,
+      attrition_rate: attritionRate,
       avg_salary: avgSalary,
+      cash_available: cashAvailable,
     });
+
     setResult(r);
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="text-2xl font-semibold">CFO Scenario Modeling</div>
-        <div className="text-sm text-black/60">
-          API-backed modeling for headcount + payroll. Next: multi-scenario compare + approvals.
-        </div>
+      <div className="text-2xl font-semibold">CFO Scenario Modeling</div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <label className="space-y-1">
+          <div className="text-sm font-medium">Current headcount</div>
+          <input
+            className="w-full border rounded px-3 py-2"
+            type="number"
+            value={current}
+            onChange={(e) => setCurrent(Number(e.target.value))}
+          />
+        </label>
+
+        <label className="space-y-1">
+          <div className="text-sm font-medium">Planned hires</div>
+          <input
+            className="w-full border rounded px-3 py-2"
+            type="number"
+            value={plannedHires}
+            onChange={(e) => setPlannedHires(Number(e.target.value))}
+          />
+        </label>
+
+        <label className="space-y-1">
+          <div className="text-sm font-medium">Attrition rate</div>
+          <input
+            className="w-full border rounded px-3 py-2"
+            type="number"
+            step="0.01"
+            value={attritionRate}
+            onChange={(e) => setAttritionRate(Number(e.target.value))}
+          />
+        </label>
+
+        <label className="space-y-1">
+          <div className="text-sm font-medium">Average salary</div>
+          <input
+            className="w-full border rounded px-3 py-2"
+            type="number"
+            value={avgSalary}
+            onChange={(e) => setAvgSalary(Number(e.target.value))}
+          />
+        </label>
+
+        <label className="space-y-1 md:col-span-2">
+          <div className="text-sm font-medium">Cash available</div>
+          <input
+            className="w-full border rounded px-3 py-2"
+            type="number"
+            value={cashAvailable}
+            onChange={(e) => setCashAvailable(Number(e.target.value))}
+          />
+        </label>
       </div>
 
-      <div className="rounded-2xl border border-black/10 p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input label="Current headcount" type="number" value={current} onChange={(e) => setCurrent(parseInt(e.target.value || "0"))} />
-        <Input label="Planned hires" type="number" value={hires} onChange={(e) => setHires(parseInt(e.target.value || "0"))} />
-        <Input label="Attrition rate (0–1)" type="number" value={attrition} onChange={(e) => setAttrition(parseFloat(e.target.value || "0"))} />
-        <Input label="Avg salary (annual)" type="number" value={avgSalary} onChange={(e) => setAvgSalary(parseFloat(e.target.value || "0"))} />
-        <div className="md:col-span-2">
-          <Button onClick={run}>Run scenario</Button>
-        </div>
+      <div className="rounded border p-4">
+        <div className="text-sm text-black/60">Projected headcount</div>
+        <div className="text-xl font-semibold">{projectedHeadcount}</div>
       </div>
+
+      <button className="border rounded px-4 py-2" onClick={run}>
+        Run scenario
+      </button>
 
       {result && (
-        <div className="rounded-2xl border border-black/10 p-4">
-          <div className="text-sm font-semibold">Result</div>
-          <div className="mt-2 text-sm">Future headcount: <span className="font-medium">{result.future_headcount}</span></div>
-          <div className="text-sm">Annual payroll: <span className="font-medium">${Math.round(result.annual_payroll).toLocaleString()}</span></div>
+        <div className="space-y-2 rounded border p-4">
+          <div><strong>Future headcount:</strong> {result.future_headcount}</div>
+          <div><strong>Salary cost:</strong> ${result.salary_cost.toLocaleString()}</div>
+          <div><strong>Benefits cost:</strong> ${result.benefits_cost.toLocaleString()}</div>
+          <div><strong>Bonus cost:</strong> ${result.bonus_cost.toLocaleString()}</div>
+          <div><strong>Total annual cost:</strong> ${result.total_annual_cost.toLocaleString()}</div>
+          <div><strong>Monthly burn:</strong> ${result.monthly_burn.toLocaleString()}</div>
+          <div>
+            <strong>Runway months:</strong>{" "}
+            {result.runway_months === null ? "N/A" : result.runway_months.toFixed(1)}
+          </div>
         </div>
       )}
     </div>

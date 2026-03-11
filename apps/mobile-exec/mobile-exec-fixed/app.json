@@ -3,8 +3,12 @@
     "name": "Foundry Executive",
     "slug": "foundry-executive",
     "version": "0.1.0",
-    "sdkVersion": "51.0.0",
-    "platforms": ["ios","android"],
+    "sdkVersion": "55.0.0",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "extra": {
       "apiBaseUrl": "http://localhost:8000/api"
     }

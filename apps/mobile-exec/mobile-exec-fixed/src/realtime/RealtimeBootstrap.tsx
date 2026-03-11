@@ -6,7 +6,14 @@ export default function RealtimeBootstrap() {
   const push = useEventStore((s: any) => s.push);
 
   useEffect(() => {
-    connectRealtime(push);
+    connectRealtime((msg: any) => {
+      // bus wraps events as { event: "decision", data: {...} }
+      // handle both wrapped and unwrapped formats
+      const payload = msg?.data ?? msg;
+      if (payload?.id) {
+        push(payload);
+      }
+    });
   }, []);
 
   return null;

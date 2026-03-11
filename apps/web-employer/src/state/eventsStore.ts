@@ -1,16 +1,28 @@
 import { create } from "zustand";
 
-export const useEventStore = create((set) => ({
+export type RealtimeEvent = {
+  id?: string;
+  type?: string;
+  title?: string;
+  message?: string;
+  created_at?: string;
+  payload?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+type EventsState = {
+  events: RealtimeEvent[];
+  push: (event: RealtimeEvent) => void;
+  clear: () => void;
+};
+
+export const useEventsStore = create<EventsState>((set) => ({
   events: [],
 
-  push: (event) =>
+  push: (event: RealtimeEvent) =>
     set((s) => ({
       events: [event, ...s.events],
     })),
 
-  remove: (id) =>
-    set((s) => ({
-      events: s.events.filter(e => e.id !== id),
-    }))
+  clear: () => set({ events: [] }),
 }));
-

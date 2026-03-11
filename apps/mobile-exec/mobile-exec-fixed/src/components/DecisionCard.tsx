@@ -13,17 +13,21 @@ interface DecisionEvent {
   actions: Action[];
 }
 
-export default function DecisionCard({ event }: { event: DecisionEvent }) {
+export default function DecisionCard({ event }: { event: any }) {
+  // unwrap bus format: { event: "decision", data: {...} }
+  const d: DecisionEvent = event?.data ?? event;
+  const actions: Action[] = d?.actions ?? [];
+
   async function respond(action: string) {
-    await respondToDecision(event.id, action);
+    await respondToDecision(d.id, action);
   }
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>{event.title}</Text>
-      <Text style={styles.message}>{event.message}</Text>
+      <Text style={styles.title}>{d?.title}</Text>
+      <Text style={styles.message}>{d?.message}</Text>
       <View style={styles.actions}>
-        {event.actions.map(a => (
+        {actions.map(a => (
           <Pressable key={a.id} style={styles.button} onPress={() => respond(a.id)}>
             <Text style={styles.buttonText}>{a.label}</Text>
           </Pressable>
@@ -34,16 +38,7 @@ export default function DecisionCard({ event }: { event: DecisionEvent }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    elevation: 3,
-  },
+  card: { backgroundColor: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 2px 5px rgba(0,0,0,0.12)" },
   title: { fontSize: 16, fontWeight: "700", marginBottom: 4 },
   message: { color: "#555", marginBottom: 12 },
   actions: { flexDirection: "row", gap: 8 },

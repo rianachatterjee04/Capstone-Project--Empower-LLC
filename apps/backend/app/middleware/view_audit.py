@@ -1,58 +1,69 @@
 from __future__ import annotations
-from typing import Callable, Optional, Tuple
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
-from fastapi import Request
+import logging
+from typing import Optional, Tuple
 from sqlalchemy import text
+from starlette.types import ASGIApp, Scope, Receive, Send
 from app.db.session import AsyncSessionLocal
 from app.core.security import decode_supabase_jwt, get_actor_from_claims
+
+logger = logging.getLogger("audit")
 
 def _infer(path: str) -> Tuple[Optional[str], Optional[str]]:
     parts = [p for p in path.split("/") if p]
     if len(parts) >= 3 and parts[0] == "api":
-        resource = parts[1]
-        candidate = parts[2]
-        if len(candidate) >= 32:
-            return resource, candidate
+        return parts[1], parts[2]
     return None, None
 
-class ViewAuditMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable):
-        response: Response = await call_next(request)
-        try:
-            if request.method != "GET":
-                return response
-            if not request.url.path.startswith("/api/"):
-                return response
-            auth = request.headers.get("authorization", "")
-            if not auth.startswith("Bearer "):
-                return response
-            token = auth.split(" ", 1)[1].strip()
-            claims = decode_supabase_jwt(token)
-            actor = get_actor_from_claims(claims)
-            org_id = actor.get("org_id")
-            if not org_id:
-                return response
+class ViewAuditMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
 
-            entity_type, entity_id = _infer(request.url.path)
-            ip = request.client.host if request.client else None
-            ua = request.headers.get("user-agent")
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        # Only process HTTP requests for the audit
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-            async with AsyncSessionLocal() as db:
-                await db.execute(text("""
-                    insert into public.view_events(org_id, actor_user_id, actor_role, route, entity_type, entity_id, ip, user_agent)
-                    values (:org_id, :actor_user_id, :actor_role, :route, :entity_type, :entity_id, :ip, :ua)
-                """), {
-                    "org_id": org_id,
-                    "actor_user_id": actor.get("user_id"),
-                    "actor_role": actor.get("role"),
-                    "route": request.url.path,
-                    "entity_type": entity_type,
-                    "entity_id": entity_id,
-                    "ip": ip,
-                    "ua": ua,
-                })
-                await db.commit()
-        except Exception:
-            pass
-        return response
+        # Execute the request first to ensure the UI gets its data ASAP
+        await self.app(scope, receive, send)
+
+        # Audit Logic (Post-Response)
+        path = scope.get("path", "")
+        method = scope.get("method", "")
+
+        if method == "GET" and path.startswith("/api/"):
+            # Extract headers from ASGI scope
+            headers = dict(scope.get("headers", []))
+            auth_header = headers.get(b"authorization", b"").decode("utf-8")
+
+            if auth_header.startswith("Bearer "):
+                try:
+                    token = auth_header.split(" ", 1)[1].strip()
+                    claims = decode_supabase_jwt(token)
+                    actor = get_actor_from_claims(claims)
+                    org_id = actor.get("org_id")
+
+                    if org_id:
+                        entity_type, entity_id = _infer(path)
+                        ua = headers.get(b"user-agent", b"").decode("utf-8")
+
+                        async with AsyncSessionLocal() as db:
+                            await db.execute(text("""
+                                INSERT INTO public.view_events(
+                                    org_id, actor_user_id, actor_role, route, 
+                                    entity_type, entity_id, user_agent
+                                )
+                                VALUES (:org_id, :actor_user_id, :actor_role, :route, :entity_type, :entity_id, :ua)
+                            """), {
+                                "org_id": org_id,
+                                "actor_user_id": actor.get("user_id"),
+                                "actor_role": actor.get("role"),
+                                "route": path,
+                                "entity_type": entity_type,
+                                "entity_id": entity_id,
+                                "ua": ua,
+                            })
+                            await db.commit()
+                except Exception as e:
+                    # Log but don't crash the app
+                    logger.error(f"Audit Log Failed: {e}")
