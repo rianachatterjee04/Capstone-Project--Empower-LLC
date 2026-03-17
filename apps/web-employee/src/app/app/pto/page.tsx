@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
-import { supabase } from "@/lib/supabaseClient";
 
 type PTORequest = {
   id: string;
@@ -30,36 +29,42 @@ export default function PTOPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
+  const [employeeName, setEmployeeName] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [requests, setRequests] = useState<PTORequest[]>([]);
-  const [submitted, setSubmitted] = useState(false);
 
   const days = startDate && endDate
     ? Math.max(0, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1)
     : 0;
 
   async function submit() {
-    if (!startDate || !endDate || !reason) return;
+    if (!startDate || !endDate || !reason || !employeeName) return;
     setSubmitting(true);
-    setStatus(null);
-    try {
-      const { data } = await supabase.auth.getSession();
-      const email = data.session?.user?.email ?? "employee@company.com";
-      const name = email.split("@")[0];
+    setStatusMsg(null);
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/decisions/respond`, {
+    const id = crypto.randomUUID();
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
+    const wsBase = apiBase.replace(/\/api$/, "");
+
+    try {
+      const res = await fetch(`${wsBase}/ws/test-broadcast`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: crypto.randomUUID(),
-          action: "request",
-          metadata: { start_date: startDate, end_date: endDate, reason, employee: name, days }
+          id,
+          title: "Approve PTO Request",
+          message: `${employeeName} requesting ${days} day${days > 1 ? "s" : ""} off ${startDate} to ${endDate}. Reason: ${reason}`,
+          actions: [
+            { id: "approve", label: "Approve" },
+            { id: "deny", label: "Deny" }
+          ]
         }),
       });
 
+      const data = await res.json();
       const newRequest: PTORequest = {
-        id: crypto.randomUUID(),
+        id,
         start_date: startDate,
         end_date: endDate,
         reason,
@@ -70,23 +75,12 @@ export default function PTOPage() {
       setStartDate("");
       setEndDate("");
       setReason("");
-      setSubmitted(true);
-      setStatus("PTO request submitted! Your manager will be notified.");
+      setStatusMsg(data.subscribers > 0
+        ? `✓ Request sent to manager for approval (${data.subscribers} reviewer${data.subscribers > 1 ? "s" : ""} notified).`
+        : "✓ Request submitted. No managers currently online — they will be notified when they log in."
+      );
     } catch (e) {
-      setStatus("Request submitted locally. Backend notification pending.");
-      const newRequest: PTORequest = {
-        id: crypto.randomUUID(),
-        start_date: startDate,
-        end_date: endDate,
-        reason,
-        status: "pending",
-        created_at: new Date().toISOString(),
-      };
-      setRequests((prev) => [newRequest, ...prev]);
-      setStartDate("");
-      setEndDate("");
-      setReason("");
-      setSubmitted(true);
+      setStatusMsg("Failed to submit request. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -102,6 +96,7 @@ export default function PTOPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm space-y-4">
           <div className="text-sm font-semibold">New request</div>
+          <Input label="Your name" value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} placeholder="Jane Smith" />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Start date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <Input label="End date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
@@ -121,12 +116,12 @@ export default function PTOPage() {
               placeholder="Vacation, personal, medical, etc."
             />
           </div>
-          <Button onClick={submit} disabled={!startDate || !endDate || !reason || submitting}>
+          <Button onClick={submit} disabled={!startDate || !endDate || !reason || !employeeName || submitting}>
             {submitting ? "Submitting…" : "Submit request"}
           </Button>
-          {status && (
-            <div className={`text-sm rounded-xl px-3 py-2 ${submitted ? "bg-emerald-50 text-emerald-700" : "text-black/60"}`}>
-              {status}
+          {statusMsg && (
+            <div className={`text-sm rounded-xl px-3 py-2 ${statusMsg.startsWith("✓") ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+              {statusMsg}
             </div>
           )}
         </div>
@@ -145,6 +140,7 @@ export default function PTOPage() {
                   <div>
                     <div className="text-sm font-medium">{r.start_date} → {r.end_date}</div>
                     <div className="text-xs text-black/50">{r.reason}</div>
+                    <div className="text-xs text-black/40">{new Date(r.created_at).toLocaleString()}</div>
                   </div>
                   <Badge status={r.status} />
                 </div>
