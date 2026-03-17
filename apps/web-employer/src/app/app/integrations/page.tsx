@@ -1,25 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { apiPost } from "@/lib/api";
+import { apiFetch, apiPost } from "@/lib/api";
+import { Button } from "@/components/Button";
 
-type Provider = {
-  provider: string;
-  connected: boolean;
-};
-
-type GreenhouseConnectResponse = {
-  ok: boolean;
-  provider: string;
-  webhook_secret?: string;
-  sync_started?: boolean;
-};
-
-type LeverConnectResponse = {
-  ok: boolean;
-  provider: string;
-  oauth_url: string;
-};
+type Provider = { provider: string; connected: boolean };
+type GreenhouseConnectResponse = { ok: boolean; provider: string; webhook_secret?: string; sync_started?: boolean };
+type LeverConnectResponse = { ok: boolean; provider: string; oauth_url: string };
 
 export default function IntegrationsPage() {
   const [greenhouseMessage, setGreenhouseMessage] = useState("");
@@ -27,29 +14,13 @@ export default function IntegrationsPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
 
   async function loadProviders() {
-    const r = await fetch("http://localhost:8000/api/integrations/providers", {
-      headers: {
-        "x-org-id": "11111111-1111-1111-1111-111111111111",
-        "x-user-id": "22222222-2222-2222-2222-222222222222",
-        "x-role": "owner",
-      },
-      cache: "no-store",
-    });
-
-    const data: { items?: Provider[] } = await r.json();
+    const data = await apiFetch<{ items?: Provider[] }>("/integrations/providers");
     setProviders(data.items || []);
   }
 
   async function connectGreenhouse() {
-    const r = await apiPost<GreenhouseConnectResponse>("/integrations/connect/greenhouse", {
-      api_key: "demo-greenhouse-api-key",
-    });
-
-    setGreenhouseMessage(
-      r.sync_started
-        ? "Greenhouse connected and initial sync started."
-        : "Greenhouse connected, but Temporal sync did not start locally."
-    );
+    const r = await apiPost<GreenhouseConnectResponse>("/integrations/connect/greenhouse", { api_key: "demo-greenhouse-api-key" });
+    setGreenhouseMessage(r.sync_started ? "Greenhouse connected and initial sync started." : "Greenhouse connected, but Temporal sync did not start locally.");
   }
 
   async function connectLever() {
@@ -59,43 +30,38 @@ export default function IntegrationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="text-2xl font-semibold">Integrations</div>
-
-      <div className="flex gap-3">
-        <button className="border rounded px-4 py-2" onClick={loadProviders}>
-          Load providers
-        </button>
-        <button className="border rounded px-4 py-2" onClick={connectGreenhouse}>
-          Connect Greenhouse
-        </button>
-        <button className="border rounded px-4 py-2" onClick={connectLever}>
-          Connect Lever
-        </button>
+      <div>
+        <div className="text-2xl font-semibold">Integrations</div>
+        <div className="mt-1 text-sm text-black/50">Connect your ATS and HR tools</div>
       </div>
 
-      {greenhouseMessage && (
-        <div className="rounded border p-3 text-sm">{greenhouseMessage}</div>
-      )}
-
-      {leverUrl && (
-        <div className="rounded border p-3 text-sm break-all">
-          <div className="font-medium mb-1">Lever OAuth URL</div>
-          <a className="underline" href={leverUrl} target="_blank" rel="noreferrer">
-            {leverUrl}
-          </a>
+      <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm space-y-4">
+        <div className="text-sm font-semibold">ATS Providers</div>
+        <div className="flex gap-3 flex-wrap">
+          <Button variant="secondary" onClick={loadProviders}>Load providers</Button>
+          <Button variant="secondary" onClick={connectGreenhouse}>Connect Greenhouse</Button>
+          <Button variant="secondary" onClick={connectLever}>Connect Lever</Button>
         </div>
-      )}
-
-      <div className="rounded border p-4">
-        <div className="font-medium mb-2">Providers</div>
-        <div className="space-y-2">
+        {greenhouseMessage && (
+          <div className="rounded-xl border border-black/10 p-3 text-sm">{greenhouseMessage}</div>
+        )}
+        {leverUrl && (
+          <div className="rounded-xl border border-black/10 p-3 text-sm break-all">
+            <div className="font-medium mb-1">Lever OAuth URL</div>
+            <a className="underline" href={leverUrl} target="_blank" rel="noreferrer">{leverUrl}</a>
+          </div>
+        )}
+        <div className="divide-y divide-black/5">
+          <div className="pb-2 text-sm font-medium">Providers</div>
           {providers.length === 0 ? (
-            <div className="text-sm text-black/60">No providers loaded yet.</div>
+            <div className="pt-3 text-sm text-black/40">No providers loaded yet.</div>
           ) : (
             providers.map((p) => (
-              <div key={p.provider} className="flex items-center justify-between">
-                <span>{p.provider}</span>
-                <span>{p.connected ? "Connected" : "Not connected"}</span>
+              <div key={p.provider} className="flex items-center justify-between py-3">
+                <span className="text-sm font-medium capitalize">{p.provider}</span>
+                <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full border ${p.connected ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-50 text-gray-500 border-gray-200"}`}>
+                  {p.connected ? "Connected" : "Not connected"}
+                </span>
               </div>
             ))
           )}

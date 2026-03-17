@@ -40,11 +40,14 @@ export default function ATSMappingPage() {
 
   return (
     <div className="space-y-6">
-      <div className="text-2xl font-semibold">ATS Stage Mapping</div>
+      <div>
+        <div className="text-2xl font-semibold">ATS Stage Mapping</div>
+        <div className="mt-1 text-sm text-black/50">Map external ATS stages to internal pipeline stages</div>
+      </div>
 
       <div className="flex gap-3">
         <select
-          className="border rounded px-3 py-2"
+          className="rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20"
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
         >
@@ -53,21 +56,21 @@ export default function ATSMappingPage() {
         </select>
 
         <input
-          className="border rounded px-3 py-2"
+          className="rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20"
           placeholder="External stage"
           value={externalStage}
           onChange={(e) => setExternalStage(e.target.value)}
         />
 
         <input
-          className="border rounded px-3 py-2"
+          className="rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20"
           placeholder="Internal stage"
           value={internalStage}
           onChange={(e) => setInternalStage(e.target.value)}
         />
 
         <button
-          className="border rounded px-4 py-2"
+          className="rounded-xl border border-black/15 px-4 py-2 text-sm font-medium hover:bg-black/5 transition"
           onClick={save}
         >
           Save
@@ -76,7 +79,7 @@ export default function ATSMappingPage() {
 
       <div className="space-y-2">
         {mappings.map((m, i) => (
-          <div key={`${m.external_stage}-${m.internal_stage}-${i}`} className="border rounded p-3">
+          <div key={`${m.external_stage}-${m.internal_stage}-${i}`} className="rounded-xl border border-black/10 p-3">
             <div><strong>External:</strong> {m.external_stage}</div>
             <div><strong>Internal:</strong> {m.internal_stage}</div>
           </div>

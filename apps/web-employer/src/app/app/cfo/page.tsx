@@ -95,12 +95,12 @@ export default function CFOPage() {
         </label>
       </div>
 
-      <div className="rounded border p-4">
+      <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm">
         <div className="text-sm text-black/60">Projected headcount</div>
-        <div className="text-xl font-semibold">{projectedHeadcount}</div>
+        <div className="text-2xl font-bold tracking-tight">{projectedHeadcount}</div>
       </div>
 
-      <button className="border rounded px-4 py-2" onClick={run}>
+      <button className="rounded-xl border border-black/15 px-4 py-2 text-sm font-medium hover:bg-black/5 transition" onClick={run}>
         Run scenario
       </button>
 

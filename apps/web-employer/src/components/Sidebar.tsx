@@ -15,6 +15,7 @@ const NAV: NavItem[] = [
   { href: "/app/policies", label: "Policies", roles: ["owner", "admin", "hr"] },
   { href: "/app/escalations", label: "Escalations", roles: ["owner", "admin", "hr", "manager"] },
   { href: "/app/documents", label: "Documents", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/hr", label: "HR Dashboard", roles: ["owner", "admin", "hr"] },
   { href: "/app/ai", label: "AI Memory", roles: ["owner", "admin", "hr"] },
   { href: "/app/market", label: "Market Data", roles: ["owner", "admin", "hr"] },
   { href: "/app/bonuses", label: "Bonuses", roles: ["owner", "admin", "hr"] },
