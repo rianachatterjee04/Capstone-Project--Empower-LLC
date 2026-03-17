@@ -6,61 +6,14 @@ import { getUserContext, signOut, type AppRole } from "@/lib/auth";
 type NavItem = { href: string; label: string; roles: AppRole[] };
 
 const NAV: NavItem[] = [
-  {
-    "href": "/app",
-    "label": "Dashboard",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager",
-      "employee"
-    ]
-  },
-  {
-    "href": "/app/org",
-    "label": "Org Tree",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager"
-    ]
-  },
-  {
-    "href": "/app/onboarding",
-    "label": "Onboarding",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager",
-      "employee"
-    ]
-  },
-  {
-    "href": "/app/cases",
-    "label": "Reports",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager",
-      "employee"
-    ]
-  },
-  {
-    "href": "/app/documents",
-    "label": "Documents",
-    "roles": [
-      "owner",
-      "admin",
-      "hr",
-      "manager",
-      "employee"
-    ]
-  }
-] as any;
+  { href: "/app", label: "Dashboard", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/org", label: "Org Tree", roles: ["owner", "admin", "hr", "manager"] },
+  { href: "/app/onboarding", label: "Onboarding", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/pto", label: "PTO Requests", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/benefits", label: "Benefits", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/cases", label: "Reports", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/documents", label: "Documents", roles: ["owner", "admin", "hr", "manager", "employee"] },
+];
 
 export function Sidebar() {
   const [role, setRole] = useState<AppRole>("employee");
