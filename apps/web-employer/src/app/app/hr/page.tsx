@@ -149,7 +149,7 @@ export default function HRPage() {
             <div key={rule.id} className="flex items-center justify-between px-5 py-3 hover:bg-black/[0.02]">
               <div>
                 <div className="text-sm font-medium">{rule.name}</div>
-                <div className="text-xs text-black/50 capitalize">{rule.trigger_type.replace(/_/g, " ")}</div>
+                <div className="text-xs text-black/50 capitalize">{rule.entity_type?.replace(/_/g, " ")}</div>
               </div>
               <Badge status={rule.is_active ? "active" : "inactive"} />
             </div>
