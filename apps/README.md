@@ -191,8 +191,11 @@ exp://<your-local-ip>:8081
 ```bash
 cd apps/mobile-exec/mobile-exec-fixed
 ulimit -n 65536
+npm install react@18.2.0 react-dom@18.2.0 --legacy-peer-deps
+npm install typescript@~5.3.3 @types/react@~18.2.79 --save-dev --legacy-peer-deps
 npm install
 npm install typescript@~5.3.3 @types/react@~18.2.79 --save-dev
+npx expo start --clear
 ```
 
 #### curl command to test-
