@@ -1,9 +1,11 @@
 import { env } from "./env";
 import { supabase } from "./supabaseClient";
 
-async function getToken(): Promise<string | null> {
+const DEV_TOKEN = "dev:11111111-1111-1111-1111-111111111111:employee:dev@local.test:22222222-2222-2222-2222-222222222222";
+
+async function getToken(): Promise<string> {
   const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  return data.session?.access_token ?? DEV_TOKEN;
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -12,7 +14,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      Authorization: `Bearer ${token}`,
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
