@@ -5,15 +5,21 @@ import { apiFetch, apiPost } from "@/lib/api";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 
+type AtsProviderRow = { provider: string; connected: boolean };
+type AtsProvidersResponse = { items: AtsProviderRow[] };
+
 export default function ATSPage() {
-  const providersQ = useQuery({ queryKey: ["ats_providers"], queryFn: () => apiFetch<{ providers: string[] }>("/ats/providers") });
+  const providersQ = useQuery({
+    queryKey: ["ats_providers"],
+    queryFn: () => apiFetch<AtsProvidersResponse>("/ats/providers"),
+  });
   const jobsQ = useQuery({ queryKey: ["jobs"], queryFn: () => apiFetch<any[]>("/recruiting/jobs") });
 
-  const [provider, setProvider] = useState("linkedin");
+  const [provider, setProvider] = useState<"greenhouse" | "lever">("greenhouse");
   const [jobId, setJobId] = useState("");
 
   async function publish() {
-    await apiPost("/ats/publish", { provider, job_posting_id: jobId });
+    await apiPost("/ats/publish", { provider, job_id: jobId || undefined });
   }
 
   return (
@@ -24,8 +30,21 @@ export default function ATSPage() {
       </div>
 
       <div className="rounded-2xl border border-black/10 p-4 space-y-3">
-        <Input label="Provider" value={provider} onChange={(e) => setProvider(e.target.value)} />
-        <div className="text-xs text-black/50">Available: {(providersQ.data?.providers ?? []).join(", ")}</div>
+        <label className="block text-sm font-medium text-black/80">Provider</label>
+        <select
+          className="mt-1 w-full max-w-md rounded-xl border border-black/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20"
+          value={provider}
+          onChange={(e) => setProvider(e.target.value as "greenhouse" | "lever")}
+        >
+          <option value="greenhouse">Greenhouse</option>
+          <option value="lever">Lever</option>
+        </select>
+        <div className="text-xs text-black/50">
+          Connection status:{" "}
+          {(providersQ.data?.items ?? [])
+            .map((p) => `${p.provider}${p.connected ? " (connected)" : ""}`)
+            .join(" · ") || "loading…"}
+        </div>
         <Input label="Job posting ID" value={jobId} onChange={(e) => setJobId(e.target.value)} />
         <Button onClick={publish}>Publish</Button>
         <div className="text-xs text-black/50">Tip: create a job in Recruiting, then paste its ID here.</div>
