@@ -233,7 +233,7 @@ If you see:
 Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL
 ```
 
-You likely have placeholder values in `.env.local`.
+You likely have placeholder values in `.env`.
 
 Replace:
 
@@ -250,6 +250,50 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxx.supabase.co
 Then restart the dev server.
 
 ---
+
+---
+
+### ❗ documents table is not available yet
+
+If you see this error when clicking **Presign + Register** in the employee portal:
+
+The local Postgres database is missing the required tables. Run all migrations against the Docker container:
+
+```bash
+cd infra/supabase
+for f in migrations/*.sql; do
+  echo "Running $f..."
+  docker exec -i empower-postgres psql -U postgres -d postgres < "$f"
+done
+```
+
+Then seed the dev org (required for the foreign key on `documents.org_id`):
+
+```bash
+docker exec -i empower-postgres psql -U postgres -d postgres < seed.sql
+```
+
+If the seed doesn't insert the dev org, do it manually:
+
+```bash
+docker exec -it empower-postgres psql -U postgres -d postgres
+```
+
+```sql
+insert into public.orgs (id, name)
+values ('11111111-1111-1111-1111-111111111111', 'Dev Org')
+on conflict do nothing;
+\q
+```
+
+Then restart Docker and try again:
+
+```bash
+docker compose down
+docker compose up
+```
+
+> **Note:** The backend connects to the local Docker Postgres (`localhost:5432`), not Supabase. Migrations must be run against the Docker container, not via `supabase db push`.
 
 ### 💡 EMFILE: too many open files (Expo)
 
