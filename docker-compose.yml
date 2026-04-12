@@ -19,8 +19,8 @@ services:
   backend:
     build: ./apps/backend
     container_name: empower-backend
-    volumes:
-      - ./apps/backend:/app  # <--- CRITICAL: Maps code into container
+    # volumes:
+    #   - ./apps/backend:/app  # <--- CRITICAL: Maps code into container
     env_file:
       - ./apps/backend/.env
     depends_on:
@@ -28,8 +28,8 @@ services:
         condition: service_healthy # <--- Backend waits for Postgres to be 'ready'
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/postgres
+    # environment:
+    #   DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/postgres
 
   orchestrator:
     build: ./apps/ai-orchestrator/ai-orchestrator-fixed

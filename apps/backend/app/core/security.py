@@ -2,7 +2,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any, Dict
 import httpx
-from jose import jwt, JWTError
+import jwt as pyjwt
 from app.core.config import settings
 
 class AuthError(Exception):
@@ -19,20 +19,25 @@ def _jwks() -> Dict[str, Any]:
 
 def decode_supabase_jwt(token: str) -> Dict[str, Any]:
     try:
-        if settings.supabase_jwks_url:
+        header = pyjwt.get_unverified_header(token)
+        kid = header.get("kid", "")
+        alg = header.get("alg", "HS256")
+
+        if alg == "ES256" and settings.supabase_jwks_url:
             jwks = _jwks()
-            headers = jwt.get_unverified_header(token)
-            kid = headers.get("kid")
             keys = jwks.get("keys", [])
-            key = next((k for k in keys if k.get("kid") == kid), None)
-            if not key:
-                raise AuthError("JWT key not found (kid mismatch)")
-            return jwt.decode(token, key, algorithms=["RS256"], options={"verify_aud": False})
+            key_data = next((k for k in keys if k.get("kid", "").lower() == kid.lower()), None)
+            if key_data:
+                public_key = pyjwt.algorithms.ECAlgorithm.from_jwk(key_data)
+                return pyjwt.decode(token, public_key, algorithms=["ES256"], options={"verify_aud": False})
+
+        # Fallback to HS256 secret
         if settings.supabase_jwt_secret:
-            return jwt.decode(token, settings.supabase_jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
-        raise AuthError("Auth not configured: set SUPABASE_JWKS_URL or SUPABASE_JWT_SECRET")
-    except (JWTError, StopIteration) as e:
-        raise AuthError("Invalid token") from e
+            return pyjwt.decode(token, settings.supabase_jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
+
+        raise AuthError("Auth not configured")
+    except pyjwt.PyJWTError as e:
+        raise AuthError(f"Invalid token: {e}") from e
 
 def get_actor_from_claims(claims: Dict[str, Any]) -> Dict[str, Any]:
     sub = claims.get("sub")

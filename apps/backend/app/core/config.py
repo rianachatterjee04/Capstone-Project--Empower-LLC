@@ -10,6 +10,8 @@ class Settings(BaseSettings):
 
     env: str = Field(default="dev", alias="ENV")
     service_name: str = Field(default="foundry-people-backend", alias="SERVICE_NAME")
+    # Comma-separated extra browser origins for CORS (e.g. http://192.168.1.10:3000)
+    cors_extra_origins: str = Field(default="", alias="CORS_EXTRA_ORIGINS")
 
     supabase_url: AnyHttpUrl | None = Field(default=None, alias="SUPABASE_URL")
     supabase_anon_key: str | None = Field(default=None, alias="SUPABASE_ANON_KEY")

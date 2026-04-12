@@ -12,6 +12,13 @@ old/
 # Python
 __pycache__/
 *.pyc
+.venv/
+
+# Archives (local backups)
+*.zip
+
+# Supabase CLI local cache
+infra/supabase/supabase/.temp/
 
 # Mac
 .DS_Store

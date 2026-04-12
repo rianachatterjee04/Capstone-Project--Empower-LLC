@@ -2,6 +2,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
+import re
+
+from app.core.config import settings
 
 # -----------------------------------------------------------------------------
 # Create App
@@ -28,6 +31,27 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:8081",
 ]
 
+_EXTRA_ORIGINS = [o.strip() for o in settings.cors_extra_origins.split(",") if o.strip()]
+CORS_ALLOW_ORIGINS = [*ALLOWED_ORIGINS, *_EXTRA_ORIGINS]
+
+# Next.js often binds IPv6 (::1) or uses a free port (3002+); Starlette returns 400 on preflight if Origin is not allowed.
+_DEV_LOCAL_ORIGIN_RE = re.compile(r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?\Z")
+
+
+def _is_production_env() -> bool:
+    return settings.env.lower() in ("prod", "production")
+
+
+def _cors_reflect_origin(origin: str | None) -> str:
+    if not origin:
+        return ALLOWED_ORIGINS[0]
+    if origin in CORS_ALLOW_ORIGINS:
+        return origin
+    if not _is_production_env() and _DEV_LOCAL_ORIGIN_RE.match(origin):
+        return origin
+    return ALLOWED_ORIGINS[0]
+
+
 # -----------------------------------------------------------------------------
 # Global Exception Handler
 # -----------------------------------------------------------------------------
@@ -35,9 +59,7 @@ ALLOWED_ORIGINS = [
 async def global_exception_handler(request: Request, exc: Exception):
     logging.exception("Global Error")
 
-    origin = request.headers.get("origin")
-    if origin not in ALLOWED_ORIGINS:
-        origin = ALLOWED_ORIGINS[0]
+    origin = _cors_reflect_origin(request.headers.get("origin"))
 
     return JSONResponse(
         status_code=500,
@@ -60,14 +82,17 @@ from app.middleware.view_audit import ViewAuditMiddleware
 
 app.add_middleware(ViewAuditMiddleware)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+_cors_kwargs: dict = {
+    "allow_origins": CORS_ALLOW_ORIGINS,
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+    "expose_headers": ["*"],
+}
+if not _is_production_env():
+    _cors_kwargs["allow_origin_regex"] = _DEV_LOCAL_ORIGIN_RE.pattern
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 # -----------------------------------------------------------------------------
 # Routers

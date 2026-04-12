@@ -45,7 +45,7 @@ export function Sidebar() {
 
       <div className="mt-8 rounded-xl border border-black/10 p-3">
         <div className="text-xs text-black/60">Signed in</div>
-        <div className="truncate text-sm font-medium">{email ?? "—"}</div>
+        <div className="truncate text-sm font-medium">{email ?? "Dev mode"}</div>
         <div className="mt-2 text-xs text-black/60">
           Role: <span className="font-medium">{role}</span>
         </div>

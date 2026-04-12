@@ -19,11 +19,29 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     },
     cache: "no-store",
   });
+
   if (!res.ok) {
     let err: any = {};
-    try { err = await res.json(); } catch {}
-    throw new Error(err?.detail || err?.message || `HTTP ${res.status}`);
+    let text = "";
+    try {
+      err = await res.json();
+    } catch {
+      try { text = await res.text(); } catch {}
+    }
+    throw new Error(
+      err?.detail
+        ? typeof err.detail === "string"
+          ? err.detail
+          : JSON.stringify(err.detail)
+        : err?.message || text || `HTTP ${res.status}`
+    );
   }
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return undefined as T;
+  }
+
   return (await res.json()) as T;
 }
 

@@ -14,17 +14,19 @@ class Actor:
         self.claims = claims
 
 def _decode_supabase_jwt(token: str) -> dict:
-    from jose import jwt, JWTError
-    import json, base64
+    import jwt as pyjwt
+    import json, base64, httpx
     try:
         header_part = token.split(".")[0]
         padding = 4 - len(header_part) % 4
         header = json.loads(base64.urlsafe_b64decode(header_part + "=" * padding))
         alg = header.get("alg", "HS256")
+        kid = header.get("kid", "")
     except Exception:
         alg = "HS256"
+        kid = ""
+
     if alg == "ES256":
-        import httpx
         supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
         if not supabase_url:
             raise HTTPException(status_code=401, detail="SUPABASE_URL not configured")
@@ -32,10 +34,16 @@ def _decode_supabase_jwt(token: str) -> dict:
             jwks_url = f"{supabase_url}/auth/v1/.well-known/jwks.json"
             resp = httpx.get(jwks_url, timeout=5)
             jwks = resp.json()
-            claims = jwt.decode(token, jwks, algorithms=["ES256"], options={"verify_aud": False})
-            return claims
-        except JWTError as e:
+            keys = jwks.get("keys", [])
+            key_data = next((k for k in keys if k.get("kid", "").lower() == kid.lower()), None)
+            if not key_data:
+                raise HTTPException(status_code=401, detail=f"JWT key not found for kid: {kid}")
+            public_key = pyjwt.algorithms.ECAlgorithm.from_jwk(key_data)
+            return pyjwt.decode(token, public_key, algorithms=["ES256"], options={"verify_aud": False})
+        except pyjwt.PyJWTError as e:
             raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=401, detail=f"Token verification failed: {e}")
     else:
@@ -43,9 +51,8 @@ def _decode_supabase_jwt(token: str) -> dict:
         if not secret:
             raise HTTPException(status_code=401, detail="SUPABASE_JWT_SECRET not configured")
         try:
-            claims = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
-            return claims
-        except JWTError as e:
+            return pyjwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
+        except pyjwt.PyJWTError as e:
             raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 def require_auth(authorization: str = Header(...)) -> Actor:

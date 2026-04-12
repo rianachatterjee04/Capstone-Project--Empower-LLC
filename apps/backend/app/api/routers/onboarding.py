@@ -23,7 +23,28 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 @router.get("/packets", response_model=list[OnboardingPacketOut])
 async def list_packets(actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
     org_id = UUID(actor.org_id)
-    q = select(OnboardingPacket).where(OnboardingPacket.org_id == org_id).order_by(OnboardingPacket.created_at.desc())
+    
+    # HR/admin/owner see all packets
+    if actor.role in ("owner", "admin", "hr"):
+        q = select(OnboardingPacket).where(
+            OnboardingPacket.org_id == org_id
+        ).order_by(OnboardingPacket.created_at.desc())
+    else:
+        # Employees only see their own packet
+        er = await db.execute(
+            select(Employee).where(
+                Employee.org_id == org_id,
+                Employee.user_id == UUID(actor.user_id)
+            )
+        )
+        me = er.scalar_one_or_none()
+        if not me:
+            return []  # No employee record linked to this user yet
+        q = select(OnboardingPacket).where(
+            OnboardingPacket.org_id == org_id,
+            OnboardingPacket.employee_id == me.id
+        ).order_by(OnboardingPacket.created_at.desc())
+    
     res = await db.execute(q)
     return res.scalars().all()
 
