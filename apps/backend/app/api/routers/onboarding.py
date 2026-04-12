@@ -50,7 +50,7 @@ async def create_packet(payload: OnboardingPacketCreate, actor: Actor = Depends(
         requested_items=payload.requested_items,
         submitted_items={},
         status="pending",
-        due_at=datetime.utcnow() + timedelta(days=3)
+        # due_at=datetime.utcnow() + timedelta(days=3)
     )
 
     db.add(pkt)
@@ -63,7 +63,7 @@ async def create_packet(payload: OnboardingPacketCreate, actor: Actor = Depends(
         event_type="onboarding.created",
         entity_type="onboarding_packet",
         entity_id=pkt.id,
-        payload=payload.model_dump()
+        payload=json_safe(payload.model_dump())
     ))
 
     await db.commit()

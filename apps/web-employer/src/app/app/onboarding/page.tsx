@@ -1,401 +1,242 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch, apiPost } from "@/lib/api";
 
-type OnboardingField =
-  | "first_name"
-  | "last_name"
-  | "preferred_name"
-  | "email"
-  | "phone"
-  | "job_title"
-  | "department"
-  | "manager"
-  | "start_date"
-  | "salary"
-  | "pay_frequency"
-  | "bank_name"
-  | "account_last4"
-  | "routing_last4"
-  | "ssn_last4"
-  | "citizenship_status"
-  | "documents"
-  | "benefits";
-
-type OnboardingStep = {
-  key: string;
-  title: string;
-  fields: OnboardingField[];
+type Employee = {
+  id: string;
+  legal_name: string;
+  email: string;
+  job_title?: string | null;
+  department?: string | null;
+  status: string;
 };
 
-type OnboardingForm = {
-  first_name?: string;
-  last_name?: string;
-  preferred_name?: string;
-  email?: string;
-  phone?: string;
-  job_title?: string;
-  department?: string;
-  manager?: string;
-  start_date?: string;
-  salary?: string;
-  pay_frequency?: string;
-  bank_name?: string;
-  account_last4?: string;
-  routing_last4?: string;
-  ssn_last4?: string;
-  citizenship_status?: string;
-  documents?: string;
-  benefits?: string;
+type OnboardingPacket = {
+  id: string;
+  employee_id: string;
+  status: string;
+  requested_items: Record<string, any>;
+  submitted_items: Record<string, any>;
+  created_at: string;
 };
 
-function Input({
-  label,
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-  maxLength,
-}: {
-  label: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  type?: string;
-  placeholder?: string;
-  maxLength?: number;
-}) {
+const REQUESTED_ITEMS_DEFAULT = {
+  i9: true,
+  w4: true,
+  ssn: true,
+  direct_deposit: true,
+};
+
+function Badge({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    pending: "bg-amber-50 text-amber-700 border-amber-200",
+    in_progress: "bg-blue-50 text-blue-700 border-blue-200",
+    completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    verified: "bg-purple-50 text-purple-700 border-purple-200",
+    activated: "bg-green-50 text-green-700 border-green-200",
+  };
   return (
-    <label className="block">
-      <div className="mb-1 text-sm font-medium text-black/80">{label}</div>
-      <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        maxLength={maxLength}
-        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none ring-0 transition focus:border-black/30"
-      />
-    </label>
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${
+        colors[status] ?? "bg-gray-50 text-gray-600 border-gray-200"
+      }`}
+    >
+      {status.replace("_", " ")}
+    </span>
   );
 }
-
-function Textarea({
-  label,
-  value,
-  onChange,
-  placeholder,
-  rows = 4,
-}: {
-  label: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  placeholder?: string;
-  rows?: number;
-}) {
-  return (
-    <label className="block">
-      <div className="mb-1 text-sm font-medium text-black/80">{label}</div>
-      <textarea
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        rows={rows}
-        className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none ring-0 transition focus:border-black/30"
-      />
-    </label>
-  );
-}
-
-const steps: OnboardingStep[] = [
-  {
-    key: "personal",
-    title: "Personal info",
-    fields: ["first_name", "last_name", "preferred_name", "email", "phone"],
-  },
-  {
-    key: "job",
-    title: "Job details",
-    fields: ["job_title", "department", "manager", "start_date"],
-  },
-  {
-    key: "payroll",
-    title: "Payroll",
-    fields: ["salary", "pay_frequency", "bank_name", "account_last4", "routing_last4", "ssn_last4"],
-  },
-  {
-    key: "i9",
-    title: "I-9 verification",
-    fields: ["citizenship_status", "documents"],
-  },
-  {
-    key: "benefits",
-    title: "Benefits",
-    fields: ["benefits"],
-  },
-];
 
 export default function OnboardingPage() {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [form, setForm] = useState<OnboardingForm>({
-    pay_frequency: "biweekly",
+  const qc = useQueryClient();
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const empQ = useQuery({
+    queryKey: ["employees"],
+    queryFn: () => apiFetch<Employee[]>("/employees"),
   });
 
-  const step = steps[currentStep];
+  const packetsQ = useQuery({
+    queryKey: ["onboarding-packets"],
+    queryFn: () => apiFetch<OnboardingPacket[]>("/onboarding/packets"),
+  });
 
-  const progress = useMemo(() => {
-    return Math.round(((currentStep + 1) / steps.length) * 100);
-  }, [currentStep]);
+  const createMutation = useMutation({
+    mutationFn: (employeeId: string) =>
+      apiPost<OnboardingPacket>("/onboarding/packets", {
+        employee_id: employeeId,
+        requested_items: REQUESTED_ITEMS_DEFAULT,
+      }),
+    onSuccess: (data) => {
+      setSuccessMsg(`Onboarding packet created (ID: ${data.id})`);
+      setErrorMsg(null);
+      setSelectedEmployeeId("");
+      qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
+    },
+    onError: (e: Error) => {
+      setErrorMsg(e.message);
+      setSuccessMsg(null);
+    },
+  });
 
-  function next() {
-    setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
-  }
+  const verifyMutation = useMutation({
+    mutationFn: (packetId: string) =>
+      apiPost(`/onboarding/packets/${packetId}/verify`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
+    },
+    onError: (e: Error) => setErrorMsg(e.message),
+  });
 
-  function back() {
-    setCurrentStep((s) => Math.max(s - 1, 0));
-  }
+  const activateMutation = useMutation({
+    mutationFn: (packetId: string) =>
+      apiPost(`/onboarding/packets/${packetId}/activate`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+    },
+    onError: (e: Error) => setErrorMsg(e.message),
+  });
 
-  function submit() {
-    console.log("Onboarding form submitted:", form);
-    alert("Onboarding packet saved locally for MVP.");
+  const employees = empQ.data ?? [];
+  const packets = packetsQ.data ?? [];
+
+  const empMap = Object.fromEntries(employees.map((e) => [e.id, e]));
+  const packetEmployeeIds = new Set(packets.map((p) => p.employee_id));
+  const eligibleEmployees = employees.filter(
+    (e) => !packetEmployeeIds.has(e.id)
+  );
+
+  function handleCreate() {
+    if (!selectedEmployeeId) return;
+    createMutation.mutate(selectedEmployeeId);
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm">
-        <div className="mb-2 text-2xl font-semibold">Employee onboarding</div>
-        <div className="text-sm text-black/60">
-          Collect basic personal, job, payroll, verification, and benefits information.
-        </div>
-
-        <div className="mt-4">
-          <div className="mb-2 flex items-center justify-between text-xs text-black/50">
-            <span>
-              Step {currentStep + 1} of {steps.length}
-            </span>
-            <span>{progress}% complete</span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-black/10">
-            <div
-              className="h-full rounded-full bg-black transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+    <div className="space-y-8">
+      <div>
+        <div className="text-2xl font-semibold">Onboarding</div>
+        <div className="mt-1 text-sm text-black/50">
+          Create and manage employee onboarding packets.
         </div>
       </div>
 
-      <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm">
-        <div className="mb-1 text-lg font-semibold">{step.title}</div>
-        <div className="mb-6 text-sm text-black/60">
-          Complete the fields below for this section.
-        </div>
+      {/* Create packet */}
+      <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm space-y-4">
+        <div className="text-sm font-semibold">Create onboarding packet</div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {step.fields.includes("first_name") ? (
-            <Input
-              label="First name"
-              value={form.first_name ?? ""}
-              onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-            />
-          ) : null}
+        {empQ.isLoading && (
+          <div className="text-sm text-black/40">Loading employees…</div>
+        )}
+        {!empQ.isLoading && eligibleEmployees.length === 0 && (
+          <div className="text-sm text-black/40">
+            All employees already have onboarding packets.
+          </div>
+        )}
 
-          {step.fields.includes("last_name") ? (
-            <Input
-              label="Last name"
-              value={form.last_name ?? ""}
-              onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("preferred_name") ? (
-            <Input
-              label="Preferred name"
-              value={form.preferred_name ?? ""}
-              onChange={(e) => setForm({ ...form, preferred_name: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("email") ? (
-            <Input
-              label="Email"
-              type="email"
-              value={form.email ?? ""}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("phone") ? (
-            <Input
-              label="Phone"
-              value={form.phone ?? ""}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("job_title") ? (
-            <Input
-              label="Job title"
-              value={form.job_title ?? ""}
-              onChange={(e) => setForm({ ...form, job_title: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("department") ? (
-            <Input
-              label="Department"
-              value={form.department ?? ""}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("manager") ? (
-            <Input
-              label="Manager"
-              value={form.manager ?? ""}
-              onChange={(e) => setForm({ ...form, manager: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("start_date") ? (
-            <Input
-              label="Start date"
-              type="date"
-              value={form.start_date ?? ""}
-              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("salary") ? (
-            <Input
-              label="Annual salary"
-              type="number"
-              value={form.salary ?? ""}
-              onChange={(e) => setForm({ ...form, salary: e.target.value })}
-              placeholder="120000"
-            />
-          ) : null}
-
-          {step.fields.includes("pay_frequency") ? (
-            <label className="block">
-              <div className="mb-1 text-sm font-medium text-black/80">Pay frequency</div>
+        {eligibleEmployees.length > 0 && (
+          <div className="flex items-end gap-3">
+            <label className="flex-1 block">
+              <div className="mb-1 text-xs font-medium text-black/60">
+                Select employee
+              </div>
               <select
-                value={form.pay_frequency ?? "biweekly"}
-                onChange={(e) => setForm({ ...form, pay_frequency: e.target.value })}
+                value={selectedEmployeeId}
+                onChange={(e) => setSelectedEmployeeId(e.target.value)}
                 className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30"
               >
-                <option value="weekly">Weekly</option>
-                <option value="biweekly">Biweekly</option>
-                <option value="semimonthly">Semimonthly</option>
-                <option value="monthly">Monthly</option>
+                <option value="">— choose employee —</option>
+                {eligibleEmployees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.legal_name} ({emp.email})
+                  </option>
+                ))}
               </select>
             </label>
-          ) : null}
-
-          {step.fields.includes("bank_name") ? (
-            <Input
-              label="Bank name"
-              value={form.bank_name ?? ""}
-              onChange={(e) => setForm({ ...form, bank_name: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("account_last4") ? (
-            <Input
-              label="Account last 4"
-              maxLength={4}
-              value={form.account_last4 ?? ""}
-              onChange={(e) => setForm({ ...form, account_last4: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("routing_last4") ? (
-            <Input
-              label="Routing last 4"
-              maxLength={4}
-              value={form.routing_last4 ?? ""}
-              onChange={(e) => setForm({ ...form, routing_last4: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("ssn_last4") ? (
-            <Input
-              label="SSN last 4"
-              maxLength={4}
-              value={form.ssn_last4 ?? ""}
-              onChange={(e) => setForm({ ...form, ssn_last4: e.target.value })}
-            />
-          ) : null}
-
-          {step.fields.includes("citizenship_status") ? (
-            <label className="block md:col-span-2">
-              <div className="mb-1 text-sm font-medium text-black/80">Citizenship status</div>
-              <select
-                value={form.citizenship_status ?? ""}
-                onChange={(e) => setForm({ ...form, citizenship_status: e.target.value })}
-                className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none transition focus:border-black/30"
-              >
-                <option value="">Select</option>
-                <option value="us_citizen">U.S. Citizen</option>
-                <option value="permanent_resident">Permanent Resident</option>
-                <option value="authorized_noncitizen">Authorized Noncitizen</option>
-              </select>
-            </label>
-          ) : null}
-
-          {step.fields.includes("documents") ? (
-            <div className="md:col-span-2">
-              <Textarea
-                label="I-9 documents (MVP)"
-                value={form.documents ?? ""}
-                onChange={(e) => setForm({ ...form, documents: e.target.value })}
-                placeholder="List documents you will provide (e.g., Passport, Driver's license + SS card)."
-              />
-            </div>
-          ) : null}
-
-          {step.fields.includes("benefits") ? (
-            <div className="md:col-span-2">
-              <Textarea
-                label="Benefits elections / notes"
-                value={form.benefits ?? ""}
-                onChange={(e) => setForm({ ...form, benefits: e.target.value })}
-                placeholder="Medical plan, dental, vision, HSA/FSA, dependents, and any notes."
-              />
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-8 flex items-center justify-between">
-          <button
-            onClick={back}
-            disabled={currentStep === 0}
-            className="rounded-xl border border-black/10 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Back
-          </button>
-
-          {currentStep < steps.length - 1 ? (
             <button
-              onClick={next}
-              className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white"
+              onClick={handleCreate}
+              disabled={!selectedEmployeeId || createMutation.isPending}
+              className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
             >
-              Next
+              {createMutation.isPending ? "Creating…" : "Create packet"}
             </button>
-          ) : (
-            <button
-              onClick={submit}
-              className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white"
-            >
-              Finish
-            </button>
-          )}
-        </div>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="text-sm text-emerald-600">{successMsg}</div>
+        )}
+        {errorMsg && <div className="text-sm text-red-500">{errorMsg}</div>}
       </div>
 
-      <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm">
-        <div className="mb-2 text-sm font-semibold">Current payload preview</div>
-        <pre className="overflow-x-auto rounded-xl bg-black p-4 text-xs text-white">
-{JSON.stringify(form, null, 2)}
-        </pre>
+      {/* Packets list */}
+      <div className="rounded-2xl border border-black/10 bg-white shadow-sm">
+        <div className="border-b border-black/10 px-5 py-4">
+          <div className="text-sm font-semibold">All onboarding packets</div>
+          <div className="text-xs text-black/50 mt-0.5">
+            {packets.length} total
+          </div>
+        </div>
+
+        {packetsQ.isLoading && (
+          <div className="p-5 text-sm text-black/40">Loading…</div>
+        )}
+        {!packetsQ.isLoading && packets.length === 0 && (
+          <div className="p-5 text-sm text-black/40">
+            No packets yet. Create one above.
+          </div>
+        )}
+
+        <div className="divide-y divide-black/5">
+          {packets.map((pkt) => {
+            const emp = empMap[pkt.employee_id];
+            const submittedCount = Object.keys(pkt.submitted_items ?? {}).length;
+            const requestedCount = Object.keys(pkt.requested_items ?? {}).length;
+
+            return (
+              <div
+                key={pkt.id}
+                className="flex items-center justify-between px-5 py-4 gap-4"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate">
+                    {emp ? emp.legal_name : pkt.employee_id}
+                  </div>
+                  <div className="text-xs text-black/50 mt-0.5">
+                    {emp?.email} &middot; {submittedCount}/{requestedCount} items submitted
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge status={pkt.status} />
+
+                  {pkt.status === "completed" && (
+                    <button
+                      onClick={() => verifyMutation.mutate(pkt.id)}
+                      disabled={verifyMutation.isPending}
+                      className="rounded-lg border border-black/10 px-3 py-1 text-xs font-medium hover:bg-black/5 disabled:opacity-40"
+                    >
+                      Verify
+                    </button>
+                  )}
+
+                  {pkt.status === "verified" && (
+                    <button
+                      onClick={() => activateMutation.mutate(pkt.id)}
+                      disabled={activateMutation.isPending}
+                      className="rounded-lg bg-black px-3 py-1 text-xs font-medium text-white disabled:opacity-40"
+                    >
+                      Activate employee
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
