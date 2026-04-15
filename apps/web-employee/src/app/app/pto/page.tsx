@@ -1,5 +1,7 @@
 "use client";
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch, apiPost } from "@/lib/api";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 
@@ -26,61 +28,40 @@ function Badge({ status }: { status: string }) {
 }
 
 export default function PTOPage() {
+  const qc = useQueryClient();
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
-  const [employeeName, setEmployeeName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [requests, setRequests] = useState<PTORequest[]>([]);
+
+  const { data: requests = [], isLoading } = useQuery({
+    queryKey: ["pto-requests"],
+    queryFn: () => apiFetch<PTORequest[]>("/pto/requests"),
+  });
 
   const days = startDate && endDate
     ? Math.max(0, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1)
     : 0;
 
   async function submit() {
-    if (!startDate || !endDate || !reason || !employeeName) return;
+    if (!startDate || !endDate || !reason) return;
     setSubmitting(true);
     setStatusMsg(null);
 
-    const id = crypto.randomUUID();
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
-    const wsBase = apiBase.replace(/\/api$/, "");
-
     try {
-      const res = await fetch(`${wsBase}/ws/test-broadcast`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id,
-          title: "Approve PTO Request",
-          message: `${employeeName} requesting ${days} day${days > 1 ? "s" : ""} off ${startDate} to ${endDate}. Reason: ${reason}`,
-          actions: [
-            { id: "approve", label: "Approve" },
-            { id: "deny", label: "Deny" }
-          ]
-        }),
-      });
-
-      const data = await res.json();
-      const newRequest: PTORequest = {
-        id,
+      await apiPost<PTORequest>("/pto/requests", {
         start_date: startDate,
         end_date: endDate,
         reason,
-        status: "pending",
-        created_at: new Date().toISOString(),
-      };
-      setRequests((prev) => [newRequest, ...prev]);
+      });
+      await qc.invalidateQueries({ queryKey: ["pto-requests"] });
       setStartDate("");
       setEndDate("");
       setReason("");
-      setStatusMsg(data.subscribers > 0
-        ? `✓ Request sent to manager for approval (${data.subscribers} reviewer${data.subscribers > 1 ? "s" : ""} notified).`
-        : "✓ Request submitted. No managers currently online — they will be notified when they log in."
-      );
+      setStatusMsg("✓ PTO request submitted for review.");
     } catch (e) {
-      setStatusMsg("Failed to submit request. Please try again.");
+      setStatusMsg((e as Error).message || "Failed to submit request. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -96,7 +77,6 @@ export default function PTOPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-2xl border border-black/10 bg-white p-5 shadow-sm space-y-4">
           <div className="text-sm font-semibold">New request</div>
-          <Input label="Your name" value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} placeholder="Jane Smith" />
           <div className="grid grid-cols-2 gap-3">
             <Input label="Start date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
             <Input label="End date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
@@ -116,7 +96,7 @@ export default function PTOPage() {
               placeholder="Vacation, personal, medical, etc."
             />
           </div>
-          <Button onClick={submit} disabled={!startDate || !endDate || !reason || !employeeName || submitting}>
+          <Button onClick={submit} disabled={!startDate || !endDate || !reason || submitting}>
             {submitting ? "Submitting…" : "Submit request"}
           </Button>
           {statusMsg && (
@@ -132,7 +112,9 @@ export default function PTOPage() {
             <div className="text-xs text-black/50 mt-0.5">{requests.length} total</div>
           </div>
           <div className="divide-y divide-black/5">
-            {requests.length === 0 ? (
+            {isLoading ? (
+              <div className="p-5 text-sm text-black/40">Loading…</div>
+            ) : requests.length === 0 ? (
               <div className="p-5 text-sm text-black/40">No requests yet</div>
             ) : (
               requests.map((r) => (

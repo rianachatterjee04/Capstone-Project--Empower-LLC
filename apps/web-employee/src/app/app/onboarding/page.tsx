@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiPatch } from "@/lib/api";
+import { apiFetch, apiPatch, apiPost } from "@/lib/api";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Textarea } from "@/components/Textarea";
@@ -13,6 +13,14 @@ type Packet = {
   requested_items: Record<string, boolean>;
   submitted_items: Record<string, any>;
   created_at: string;
+};
+
+type PacketRequest = {
+  id: string;
+  status: string;
+  created_at: string;
+  message?: string | null;
+  requester_email?: string | null;
 };
 
 const STEPS = [
@@ -29,6 +37,12 @@ export default function OnboardingWizard() {
     queryFn: () => apiFetch<Packet[]>("/onboarding/packets"),
   });
 
+  const { data: myRequest, isLoading: reqLoading } = useQuery({
+    queryKey: ["onboarding-packet-request-me"],
+    queryFn: () => apiFetch<PacketRequest | null>("/onboarding/packet-requests/me"),
+    enabled: !isLoading && (data ?? []).length === 0,
+  });
+
   const packet = useMemo(() => (data ?? [])[0] ?? null, [data]);
   const requested = packet?.requested_items ?? {};
   const availableSteps = STEPS.filter((s) => requested[s.key] !== false);
@@ -38,6 +52,9 @@ export default function OnboardingWizard() {
   const [form, setForm] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [requestNote, setRequestNote] = useState("");
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [requestErr, setRequestErr] = useState<string | null>(null);
 
   const isLastStep = stepIdx === availableSteps.length - 1;
 
@@ -88,16 +105,65 @@ export default function OnboardingWizard() {
     }
   }
 
+  async function sendHrRequest() {
+    setRequestBusy(true);
+    setRequestErr(null);
+    try {
+      await apiPost<PacketRequest>("/onboarding/packet-requests", {
+        message: requestNote.trim() || undefined,
+      });
+      await qc.invalidateQueries({ queryKey: ["onboarding-packet-request-me"] });
+      setRequestNote("");
+    } catch (e) {
+      setRequestErr((e as Error).message);
+    } finally {
+      setRequestBusy(false);
+    }
+  }
+
   if (isLoading) return <div className="p-8 text-sm text-black/40">Loading…</div>;
   if (error) return <div className="p-8 text-sm text-red-600">Failed: {(error as Error).message}</div>;
 
   // No packet
   if (!packet) {
+    const sent = myRequest?.status === "pending";
     return (
       <div className="space-y-4">
         <div className="text-2xl font-semibold">Onboarding</div>
-        <div className="rounded-2xl border border-black/10 p-6 text-sm text-black/70">
-          Ask HR to create an onboarding packet for your employee record.
+        <div className="rounded-2xl border border-black/10 p-6 text-sm text-black/70 space-y-4">
+          <p>
+            You do not have an onboarding packet yet. You can notify HR from here so they know to create one
+            for your employee record.
+          </p>
+          {reqLoading ? (
+            <div className="text-black/40">Checking request status…</div>
+          ) : sent ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-emerald-900">
+              <div className="font-medium">Request sent to HR</div>
+              <div className="text-xs mt-1 text-emerald-800/90">
+                Submitted {new Date(myRequest!.created_at).toLocaleString()}
+                {myRequest?.message ? ` · Note: ${myRequest.message}` : ""}
+              </div>
+              <p className="text-xs mt-2 text-emerald-800/80">
+                HR will see this in the employer portal. You can leave this page; refresh after they create your packet.
+              </p>
+            </div>
+          ) : (
+            <>
+              <Textarea
+                label="Optional message to HR"
+                hint="e.g. start date, role, or anything that helps them match your record."
+                rows={3}
+                value={requestNote}
+                onChange={(e) => setRequestNote(e.target.value)}
+                placeholder="Optional"
+              />
+              {requestErr && <div className="text-sm text-red-600">{requestErr}</div>}
+              <Button onClick={sendHrRequest} disabled={requestBusy}>
+                {requestBusy ? "Sending…" : "Request onboarding packet from HR"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     );

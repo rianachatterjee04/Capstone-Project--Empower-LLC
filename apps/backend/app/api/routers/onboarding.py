@@ -2,19 +2,40 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select, text, or_, update
 from app.core.json_utils import json_safe
 from uuid import UUID
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.api.deps import require_org, db_session, Actor
-from app.api.schemas import OnboardingPacketOut, OnboardingPacketCreate, OnboardingPacketPatch
-from app.db.models import OnboardingPacket, Employee, AuditEvent
+from app.api.schemas import (
+    OnboardingPacketOut,
+    OnboardingPacketCreate,
+    OnboardingPacketPatch,
+    OnboardingPacketRequestCreate,
+    OnboardingPacketRequestOut,
+)
+from app.db.models import OnboardingPacket, Employee, AuditEvent, OnboardingPacketRequest
 
 # 🧠 Behavioral OS
 from app.workflow.engine import engine
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
+
+
+async def _resolve_packet_requests_for_employee(db: AsyncSession, org_id: UUID, employee: Employee) -> None:
+    conds = [OnboardingPacketRequest.employee_id == employee.id]
+    if employee.user_id is not None:
+        conds.append(OnboardingPacketRequest.requested_by_user_id == employee.user_id)
+    await db.execute(
+        update(OnboardingPacketRequest)
+        .where(
+            OnboardingPacketRequest.org_id == org_id,
+            OnboardingPacketRequest.status == "pending",
+            or_(*conds),
+        )
+        .values(status="done", resolved_at=datetime.now(timezone.utc))
+    )
 
 
 # ---------------------------------------------------------
@@ -46,6 +67,102 @@ async def list_packets(actor: Actor = Depends(require_org), db: AsyncSession = D
         ).order_by(OnboardingPacket.created_at.desc())
     
     res = await db.execute(q)
+    return res.scalars().all()
+
+
+# ---------------------------------------------------------
+# PACKET REQUESTS (employee → HR)
+# ---------------------------------------------------------
+@router.get("/packet-requests/me", response_model=OnboardingPacketRequestOut | None)
+async def my_packet_request(actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
+    org_id = UUID(actor.org_id)
+    uid = UUID(actor.user_id)
+    res = await db.execute(
+        select(OnboardingPacketRequest)
+        .where(
+            OnboardingPacketRequest.org_id == org_id,
+            OnboardingPacketRequest.requested_by_user_id == uid,
+            OnboardingPacketRequest.status == "pending",
+        )
+        .order_by(OnboardingPacketRequest.created_at.desc())
+        .limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
+@router.post("/packet-requests", response_model=OnboardingPacketRequestOut)
+async def create_packet_request(
+    payload: OnboardingPacketRequestCreate,
+    actor: Actor = Depends(require_org),
+    db: AsyncSession = Depends(db_session),
+):
+    org_id = UUID(actor.org_id)
+    uid = UUID(actor.user_id)
+
+    er = await db.execute(select(Employee).where(Employee.org_id == org_id, Employee.user_id == uid))
+    me = er.scalar_one_or_none()
+    if me:
+        existing_pkt = (
+            await db.execute(
+                select(OnboardingPacket).where(
+                    OnboardingPacket.org_id == org_id,
+                    OnboardingPacket.employee_id == me.id,
+                ).limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing_pkt:
+            raise HTTPException(status_code=400, detail="You already have an onboarding packet.")
+
+    existing_req = (
+        await db.execute(
+            select(OnboardingPacketRequest).where(
+                OnboardingPacketRequest.org_id == org_id,
+                OnboardingPacketRequest.requested_by_user_id == uid,
+                OnboardingPacketRequest.status == "pending",
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_req:
+        return existing_req
+
+    email = actor.claims.get("email") or None
+    msg = (payload.message or "").strip() or None
+    req = OnboardingPacketRequest(
+        org_id=org_id,
+        requested_by_user_id=uid,
+        employee_id=me.id if me else None,
+        requester_email=email,
+        message=msg,
+        status="pending",
+    )
+    db.add(req)
+    await db.flush()
+    db.add(
+        AuditEvent(
+            org_id=org_id,
+            actor_user_id=uid,
+            actor_role=actor.role,
+            event_type="onboarding.packet_requested",
+            entity_type="onboarding_packet_request",
+            entity_id=req.id,
+            payload=json_safe({"message": msg}),
+        )
+    )
+    await db.commit()
+    await db.refresh(req)
+    return req
+
+
+@router.get("/packet-requests", response_model=list[OnboardingPacketRequestOut])
+async def list_packet_requests(actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
+    if actor.role not in ("owner", "admin", "hr"):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    org_id = UUID(actor.org_id)
+    res = await db.execute(
+        select(OnboardingPacketRequest)
+        .where(OnboardingPacketRequest.org_id == org_id, OnboardingPacketRequest.status == "pending")
+        .order_by(OnboardingPacketRequest.created_at.desc())
+    )
     return res.scalars().all()
 
 
@@ -86,6 +203,8 @@ async def create_packet(payload: OnboardingPacketCreate, actor: Actor = Depends(
         entity_id=pkt.id,
         payload=json_safe(payload.model_dump())
     ))
+
+    await _resolve_packet_requests_for_employee(db, org_id, employee)
 
     await db.commit()
     await db.refresh(pkt)

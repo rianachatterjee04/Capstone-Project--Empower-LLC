@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { getUserContext } from "@/lib/auth";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 
 type PTORequest = {
   id: string;
@@ -37,8 +39,11 @@ function QuickLink({ href, label, description }: { href: string; label: string; 
 
 export default function Dashboard() {
   const [ctx, setCtx] = useState<{ role: string; orgId: string | null; email: string | null } | null>(null);
-  const [ptoRequests, setPtoRequests] = useState<PTORequest[]>([]);
   const [greeting, setGreeting] = useState("Good morning");
+  const { data: ptoRequests = [] } = useQuery({
+    queryKey: ["pto-requests"],
+    queryFn: () => apiFetch<PTORequest[]>("/pto/requests"),
+  });
 
   useEffect(() => {
     getUserContext().then(setCtx);

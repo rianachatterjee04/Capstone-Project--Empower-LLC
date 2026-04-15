@@ -1,8 +1,8 @@
 from __future__ import annotations
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Any, Optional, Dict, List
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date
 
 class EmployeeOut(BaseModel):
     id: UUID
@@ -48,6 +48,46 @@ class OnboardingPacketCreate(BaseModel):
 class OnboardingPacketPatch(BaseModel):
     status: Optional[str] = None
     submitted_items: Optional[Dict[str, Any]] = None
+
+class OnboardingPacketRequestCreate(BaseModel):
+    message: Optional[str] = Field(default=None, max_length=2000)
+
+class OnboardingPacketRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    org_id: UUID
+    requested_by_user_id: UUID
+    employee_id: Optional[UUID] = None
+    requester_email: Optional[str] = None
+    message: Optional[str] = None
+    status: str
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+
+class PTORequestCreate(BaseModel):
+    start_date: date
+    end_date: date
+    reason: str = Field(min_length=1, max_length=2000)
+
+class PTORequestReview(BaseModel):
+    review_note: Optional[str] = Field(default=None, max_length=2000)
+
+class PTORequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    org_id: UUID
+    employee_id: UUID
+    start_date: date
+    end_date: date
+    reason: str
+    status: str
+    reviewed_by_user_id: Optional[UUID] = None
+    reviewed_at: Optional[datetime] = None
+    review_note: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
 
 class CaseOut(BaseModel):
     id: UUID

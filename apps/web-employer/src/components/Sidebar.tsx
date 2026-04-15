@@ -10,6 +10,7 @@ const NAV: NavItem[] = [
   { href: "/app", label: "Dashboard", roles: ["owner", "admin", "hr", "manager", "employee"] },
   { href: "/app/org", label: "Org Tree", roles: ["owner", "admin", "hr", "manager"] },
   { href: "/app/onboarding", label: "Onboarding", roles: ["owner", "admin", "hr", "manager", "employee"] },
+  { href: "/app/pto", label: "PTO Requests", roles: ["owner", "admin", "hr", "manager"] },
   { href: "/app/cases", label: "Reports", roles: ["owner", "admin", "hr", "manager", "employee"] },
   { href: "/app/recruiting", label: "Recruiting", roles: ["owner", "admin", "hr", "manager"] },
   { href: "/app/policies", label: "Policies", roles: ["owner", "admin", "hr"] },

@@ -23,6 +23,7 @@ from app.api.routers.bonuses import router as bonuses
 from app.api.routers.benefits import router as benefits
 from app.api.routers.ats import router as ats
 from app.api.routers.decisions import router as decisions
+from app.api.routers.pto import router as pto
 
 # Optional router: only include if file exists
 try:
@@ -59,3 +60,4 @@ api_router.include_router(bonuses)
 api_router.include_router(benefits)
 api_router.include_router(ats)
 api_router.include_router(decisions)
+api_router.include_router(pto)

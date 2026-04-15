@@ -22,6 +22,16 @@ type OnboardingPacket = {
   created_at: string;
 };
 
+type OnboardingPacketRequest = {
+  id: string;
+  requested_by_user_id: string;
+  employee_id?: string | null;
+  requester_email?: string | null;
+  message?: string | null;
+  status: string;
+  created_at: string;
+};
+
 const REQUESTED_ITEMS_DEFAULT = {
   i9: true,
   w4: true,
@@ -64,6 +74,11 @@ export default function OnboardingPage() {
     queryFn: () => apiFetch<OnboardingPacket[]>("/onboarding/packets"),
   });
 
+  const packetRequestsQ = useQuery({
+    queryKey: ["onboarding-packet-requests"],
+    queryFn: () => apiFetch<OnboardingPacketRequest[]>("/onboarding/packet-requests"),
+  });
+
   const createMutation = useMutation({
     mutationFn: (employeeId: string) =>
       apiPost<OnboardingPacket>("/onboarding/packets", {
@@ -75,6 +90,7 @@ export default function OnboardingPage() {
       setErrorMsg(null);
       setSelectedEmployeeId("");
       qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
+      qc.invalidateQueries({ queryKey: ["onboarding-packet-requests"] });
     },
     onError: (e: Error) => {
       setErrorMsg(e.message);
@@ -115,6 +131,11 @@ export default function OnboardingPage() {
     createMutation.mutate(selectedEmployeeId);
   }
 
+  function handleCreateForRequest(employeeId?: string | null) {
+    if (!employeeId) return;
+    createMutation.mutate(employeeId);
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -122,6 +143,68 @@ export default function OnboardingPage() {
         <div className="mt-1 text-sm text-black/50">
           Create and manage employee onboarding packets.
         </div>
+      </div>
+
+      {/* Employee requests */}
+      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm space-y-3">
+        <div className="text-sm font-semibold text-amber-950">Packet requests from employees</div>
+        <p className="text-xs text-amber-900/70">
+          Employees without a packet can ask HR to create one from their portal. Resolve by creating a packet for
+          their employee record below.
+        </p>
+        {packetRequestsQ.isLoading && (
+          <div className="text-sm text-black/40">Loading requests…</div>
+        )}
+        {!packetRequestsQ.isLoading && (packetRequestsQ.data ?? []).length === 0 && (
+          <div className="text-sm text-black/45">No pending requests.</div>
+        )}
+        <ul className="space-y-2">
+          {(packetRequestsQ.data ?? []).map((r) => {
+            const emp = r.employee_id ? empMap[r.employee_id] : undefined;
+            const canCreateForRequest = !!(
+              r.employee_id &&
+              emp &&
+              !packetEmployeeIds.has(r.employee_id)
+            );
+            const alreadyHasPacket = !!(r.employee_id && packetEmployeeIds.has(r.employee_id));
+            return (
+              <li
+                key={r.id}
+                className="rounded-xl border border-amber-200/60 bg-white/90 px-4 py-3 text-sm"
+              >
+                <div className="font-medium text-black/90">
+                  {emp?.legal_name ?? "Employee record not linked yet"}
+                </div>
+                <div className="text-xs text-black/55 mt-1">
+                  {r.requester_email ?? "—"} · user {r.requested_by_user_id.slice(0, 8)}… ·{" "}
+                  {new Date(r.created_at).toLocaleString()}
+                </div>
+                {r.message && (
+                  <div className="text-xs text-black/70 mt-2 border-t border-black/5 pt-2">{r.message}</div>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    onClick={() => handleCreateForRequest(r.employee_id)}
+                    disabled={!canCreateForRequest || createMutation.isPending}
+                    className="rounded-lg bg-black px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                  >
+                    {createMutation.isPending ? "Creating..." : "Create packet for this request"}
+                  </button>
+                  {!r.employee_id && (
+                    <span className="text-xs text-black/50">
+                      No linked employee record yet.
+                    </span>
+                  )}
+                  {alreadyHasPacket && (
+                    <span className="text-xs text-emerald-700">
+                      Packet already exists for this employee.
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
       {/* Create packet */}
