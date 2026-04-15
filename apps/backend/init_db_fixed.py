@@ -304,6 +304,59 @@ async def init_models():
             on public.integration_events(org_id)
         """))
 
+
+        await conn.execute(text("""
+            create table if not exists public.pto_requests (
+                id uuid primary key default gen_random_uuid(),
+                org_id uuid not null,
+                employee_id uuid,
+                start_date date not null,
+                end_date date not null,
+                reason text,
+                status text default 'pending',
+                reviewed_by_user_id uuid,
+                reviewed_at timestamptz,
+                review_note text,
+                created_at timestamptz default now(),
+                updated_at timestamptz default now()
+            )
+        """))
+
+        await conn.execute(text("""
+            create table if not exists public.performance_cycles (
+                id uuid primary key default gen_random_uuid(),
+                org_id uuid not null,
+                name text not null,
+                status text default 'open',
+                start_date date,
+                end_date date,
+                opened_at timestamptz default now(),
+                closed_at timestamptz,
+                created_at timestamptz default now()
+            )
+        """))
+
+        await conn.execute(text("""
+            create table if not exists public.performance_reviews (
+                id uuid primary key default gen_random_uuid(),
+                org_id uuid not null,
+                employee_id uuid,
+                cycle text,
+                cycle_id uuid,
+                self_review jsonb default '{}',
+                manager_review jsonb default '{}',
+                ai_flags jsonb default '{}',
+                ai_decision text,
+                calibrated_rating numeric,
+                outcome text,
+                status text default 'draft',
+                self_submitted_at timestamptz,
+                manager_submitted_at timestamptz,
+                finalized_at timestamptz,
+                created_at timestamptz default now()
+            )
+        """))
+
     print("✅ Database tables created successfully!")
 
 
