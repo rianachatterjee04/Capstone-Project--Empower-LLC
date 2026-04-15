@@ -102,7 +102,7 @@ async def run_screening(payload: dict, actor: Actor = Depends(require_org), db: 
             inputs, outputs, created_at
         )
         values (:id, :org_id, 'resume_screening', 'candidate', :candidate_id,
-                :inputs::jsonb, :outputs::jsonb, now())
+                :inputs, :outputs, now())
     """), {
         "id": decision_id,
         "org_id": actor.org_id,
