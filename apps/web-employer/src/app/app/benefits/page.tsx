@@ -56,7 +56,7 @@ export default function BenefitsPage() {
           {(plansQ.data ?? []).map((p) => (
             <div key={p.id} className="rounded-xl border border-black/10 p-3">
               <div className="font-medium">{p.name}</div>
-              <div className="text-xs text-black/60">{p.type} • employer/mo: {p.employer_monthly_cost}</div>
+              <div className="text-xs text-black/60">{p.category} • employer/mo: {p.employer_cost}</div>
             </div>
           ))}
         </div>

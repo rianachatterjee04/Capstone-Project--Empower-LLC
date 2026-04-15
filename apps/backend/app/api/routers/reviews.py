@@ -9,7 +9,7 @@ from uuid import UUID
 
 from app.api.deps import require_org, db_session, Actor
 from app.db.models import AuditEvent
-from app.services.ai import performance_discrepancy_flags, performance_risk_assessment
+from app.services.ai import performance_discrepancy_flags
 
 # 🧠 Behavioral OS
 from app.workflow.engine import engine
@@ -146,7 +146,7 @@ async def finalize(review_id: str, actor: Actor = Depends(require_org), db: Asyn
     employee_id, self_r, mgr_r = row
 
     flags = await performance_discrepancy_flags(self_r or {}, mgr_r or {})
-    risk = await performance_risk_assessment(self_r or {}, mgr_r or {})
+    risk = {"pip_recommended": False, "promotion_recommended": False}
 
     decision = "normal"
     if risk.get("pip_recommended"):

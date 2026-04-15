@@ -27,6 +27,8 @@ from app.api.routers.decisions import router as decisions
 from app.api.routers.pto import router as pto
 
 from app.api.routers.screening import router as screening
+from app.api.routers.performance import router as performance
+from app.api.routers.reviews import router as reviews
 
 # Optional router: only include if file exists
 try:
@@ -67,3 +69,5 @@ api_router.include_router(decisions)
 api_router.include_router(pto)
 
 api_router.include_router(screening)
+api_router.include_router(performance)
+api_router.include_router(reviews)
