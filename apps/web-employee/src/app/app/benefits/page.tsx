@@ -13,20 +13,12 @@ type BenefitPlan = {
   employer_cost?: number | null;
 };
 
-type EnrollmentWindow = {
-  id: string;
-  status: string;
-  starts_at: string;
-  ends_at: string;
-};
-
 function Badge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     active: "bg-emerald-50 text-emerald-700 border-emerald-200",
     enrolled: "bg-emerald-50 text-emerald-700 border-emerald-200",
     pending: "bg-amber-50 text-amber-700 border-amber-200",
     inactive: "bg-gray-50 text-gray-500 border-gray-200",
-    open: "bg-blue-50 text-blue-700 border-blue-200",
   };
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${colors[status] ?? "bg-gray-50 text-gray-600 border-gray-200"}`}>
@@ -46,12 +38,13 @@ export default function BenefitsPage() {
     queryFn: () => apiFetch<BenefitPlan[]>("/benefits/plans")
   });
 
-  const windowQ = useQuery({
-    queryKey: ["enrollment-window"],
-    queryFn: () => apiFetch<EnrollmentWindow>("/benefits/enrollment-window")
+  // Get current employee record
+  const meQ = useQuery({
+    queryKey: ["me-employee"],
+    queryFn: () => apiFetch<any[]>("/employees").then(emps => emps[0])
   });
 
-  const plans = plansQ.data ?? [];
+  const plans = (plansQ.data ?? []).filter(p => p.employer_cost || p.employee_cost || p.category);
   const medicalPlans = plans.filter(p => p.category === "medical");
   const dentalPlans = plans.filter(p => p.category === "dental");
   const visionPlans = plans.filter(p => p.category === "vision");
@@ -61,8 +54,10 @@ export default function BenefitsPage() {
     setEnrolling(planId);
     setEnrollMsg(null);
     try {
+      const employeeId = meQ.data?.id ?? "aaaa0001-0000-0000-0000-000000000001";
       await apiPost("/benefits/enroll", {
         plan_id: planId,
+        employee_id: employeeId,
         coverage_tier: selectedTier,
       });
       setEnrollMsg("✓ Successfully enrolled in plan!");
@@ -89,10 +84,10 @@ export default function BenefitsPage() {
                 <div className="text-sm font-medium">{plan.name}</div>
                 <div className="text-xs text-black/50">{plan.provider ?? "—"}</div>
                 <div className="text-xs text-black/50 mt-0.5">
-                  {plan.employee_cost != null && (
-                    <span>Employee: <span className="font-medium">${plan.employee_cost}/mo</span></span>
+                  {plan.employee_cost != null && plan.employee_cost > 0 && (
+                    <span>Your cost: <span className="font-medium">${plan.employee_cost}/mo</span></span>
                   )}
-                  {plan.employer_cost != null && (
+                  {plan.employer_cost != null && plan.employer_cost > 0 && (
                     <span className="ml-2">Employer covers: <span className="font-medium">${plan.employer_cost}/mo</span></span>
                   )}
                 </div>
