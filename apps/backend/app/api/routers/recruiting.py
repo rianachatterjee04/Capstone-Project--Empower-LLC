@@ -115,11 +115,10 @@ async def create_candidate(payload: CandidateCreate, actor: Actor = Depends(requ
         raise HTTPException(status_code=403, detail="Not allowed")
 
     org_id = UUID(actor.org_id)
-    score, rationale, hits = explainable_ai_score(payload.resume_text)
-    status = "screened" if score >= 40 else "needs_review"
+    score, rationale, _hits = explainable_ai_score(payload.resume_text)
+    # Must match pipeline columns on the employer recruiting page: new, screened, interview, rejected, hired
+    status = "screened" if score >= 40 else "new"
 
-    # ✅ FIX 2: Removed 'pipeline_stage' as it was causing an "invalid keyword" error.
-    # If your Candidate model uses 'stage' instead of 'pipeline_stage', rename it below.
     cand = Candidate(
         org_id=org_id,
         job_posting_id=payload.job_posting_id,
@@ -129,8 +128,6 @@ async def create_candidate(payload: CandidateCreate, actor: Actor = Depends(requ
         ai_score=score,
         ai_summary=rationale,
         status=status,
-        # pipeline_stage="applied",  # <-- Removed to fix 500 error
-        ai_metadata={"matched_skills": hits}
     )
 
     db.add(cand)
