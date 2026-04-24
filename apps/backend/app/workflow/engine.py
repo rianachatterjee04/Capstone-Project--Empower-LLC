@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Dict, Any, Optional
-
+from app.db.session import get_db_session_internal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal

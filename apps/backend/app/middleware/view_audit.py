@@ -27,18 +27,26 @@ class ViewAuditMiddleware:
         # Execute the request first to ensure the UI gets its data ASAP
         await self.app(scope, receive, send)
 
-        # Audit Logic (Post-Response)
+        # Fire-and-forget audit — never blocks or re-raises into ASGI
+        import asyncio
+        asyncio.ensure_future(self._audit(scope))
+
+    async def _audit(self, scope: Scope):
         path = scope.get("path", "")
         method = scope.get("method", "")
 
         if method == "GET" and path.startswith("/api/"):
-            # Extract headers from ASGI scope
             headers = dict(scope.get("headers", []))
             auth_header = headers.get(b"authorization", b"").decode("utf-8")
 
             if auth_header.startswith("Bearer "):
                 try:
                     token = auth_header.split(" ", 1)[1].strip()
+
+                    # Skip audit for dev tokens (not real JWTs)
+                    if token.startswith("dev:"):
+                        return
+
                     claims = decode_supabase_jwt(token)
                     actor = get_actor_from_claims(claims)
                     org_id = actor.get("org_id")
@@ -50,7 +58,7 @@ class ViewAuditMiddleware:
                         async with AsyncSessionLocal() as db:
                             await db.execute(text("""
                                 INSERT INTO public.view_events(
-                                    org_id, actor_user_id, actor_role, route, 
+                                    org_id, actor_user_id, actor_role, route,
                                     entity_type, entity_id, user_agent
                                 )
                                 VALUES (:org_id, :actor_user_id, :actor_role, :route, :entity_type, :entity_id, :ua)
@@ -65,5 +73,4 @@ class ViewAuditMiddleware:
                             })
                             await db.commit()
                 except Exception as e:
-                    # Log but don't crash the app
                     logger.error(f"Audit Log Failed: {e}")

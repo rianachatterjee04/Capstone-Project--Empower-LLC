@@ -25,7 +25,7 @@ async def build_context(db: AsyncSession, org_id: str, event: str, payload: dict
     # -----------------------------------------------------
     if employee_id:
         employee = (await db.execute(text("""
-            select id, manager_id, title, level, salary, status, hire_date
+            select id, manager_employee_id, job_title, status, start_date
             from public.employees
             where id=:id and org_id=:org
         """), {"id": employee_id, "org": org_id})).mappings().first()
@@ -33,19 +33,19 @@ async def build_context(db: AsyncSession, org_id: str, event: str, payload: dict
         if employee:
 
             # manager
-            if employee["manager_id"]:
+            if employee["manager_employee_id"]:
                 manager = (await db.execute(text("""
-                    select id, title, level
+                    select id, job_title
                     from public.employees
                     where id=:id and org_id=:org
-                """), {"id": employee["manager_id"], "org": org_id})).mappings().first()
+                """), {"id": employee["manager_employee_id"], "org": org_id})).mappings().first()
 
             # teammates
             team = (await db.execute(text("""
-                select id, title, level, salary
+                select id, job_title, status
                 from public.employees
-                where manager_id=:mid and org_id=:org
-            """), {"mid": employee["manager_id"], "org": org_id})).mappings().all()
+                where manager_employee_id=:mid and org_id=:org
+            """), {"mid": employee["manager_employee_id"], "org": org_id})).mappings().all()
 
             # audit history
             history = (await db.execute(text("""
@@ -62,7 +62,6 @@ async def build_context(db: AsyncSession, org_id: str, event: str, payload: dict
     org_stats = (await db.execute(text("""
         select
             count(*) as headcount,
-            avg(salary) as avg_salary,
             count(*) filter (where status='active') as active_employees
         from public.employees
         where org_id=:org
@@ -77,7 +76,7 @@ async def build_context(db: AsyncSession, org_id: str, event: str, payload: dict
 
     # finalized reviews
     reviews = (await db.execute(text("""
-        select employee_id, ai_decision
+        select employee_id, rating, status, manager_summary
         from public.performance_reviews
         where org_id=:org and status='finalized'
     """), {"org": org_id})).mappings().all()
@@ -96,5 +95,7 @@ async def build_context(db: AsyncSession, org_id: str, event: str, payload: dict
         org_snapshot=dict(org_stats) if org_stats else {},
         open_cases=[dict(c) for c in open_cases],
         reviews=[dict(r) for r in reviews],
+        # aliases for simulator.py
+        employees=[dict(t) for t in team],  # team members as employee list
+        cases=[dict(c) for c in open_cases],
     )
-

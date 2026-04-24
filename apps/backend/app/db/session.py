@@ -17,3 +17,12 @@ async def get_db() -> AsyncSession:
 
     async with AsyncSessionLocal() as session:
         yield session
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def get_db_session_internal():
+    if AsyncSessionLocal is None:
+        raise RuntimeError("DATABASE_URL is not configured.")
+    async with AsyncSessionLocal() as session:
+        yield session
