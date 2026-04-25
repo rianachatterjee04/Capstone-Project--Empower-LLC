@@ -12,7 +12,7 @@ class PolicyOut(BaseModel):
     id: UUID
     org_id: UUID
     name: str
-    body: str
+    body: Optional[str] = None
     dsl: Dict[str, Any]
     version: int
     status: str
