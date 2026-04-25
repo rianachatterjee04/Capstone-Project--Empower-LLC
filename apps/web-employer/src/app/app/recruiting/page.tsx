@@ -38,15 +38,22 @@ export default function RecruitingPage() {
     return { cols, by };
   }, [candidates]);
 
+  const [jobCreated, setJobCreated] = useState(false);
+  const [candidateAdded, setCandidateAdded] = useState(false);
+
   async function createJob() {
     await apiPost<Job>("/recruiting/jobs", { title, description, location, status });
     await qc.invalidateQueries({ queryKey: ["jobs"] });
+    setJobCreated(true);
+    setTimeout(() => setJobCreated(false), 3000);
   }
 
   async function createCandidate() {
     await apiPost<Candidate>("/recruiting/candidates", { job_posting_id: candJobId, full_name: fullName, email, resume_text: resumeText });
     setFullName(""); setEmail(""); setResumeText("");
     await qc.invalidateQueries({ queryKey: ["candidates"] });
+    setCandidateAdded(true);
+    setTimeout(() => setCandidateAdded(false), 3000);
   }
 
   return (
@@ -65,7 +72,10 @@ export default function RecruitingPage() {
             <Input label="Status" value={status} onChange={(e) => setStatus(e.target.value)} />
           </div>
           <Textarea label="Description" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} />
-          <Button onClick={createJob}>Create job</Button>
+          <div className="flex items-center gap-3">
+            <Button onClick={createJob}>Create job</Button>
+            {jobCreated && <span className="text-sm text-green-600 font-medium">✓ Job created</span>}
+          </div>
           {jobsQ.error ? <div className="text-sm text-red-600">{(jobsQ.error as Error).message}</div> : null}
         </div>
 
@@ -85,7 +95,10 @@ export default function RecruitingPage() {
             <Input label="Candidate email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <Textarea label="Resume text (MVP)" rows={6} value={resumeText} onChange={(e) => setResumeText(e.target.value)} placeholder="Paste resume text here." />
-          <Button onClick={createCandidate} disabled={!candJobId || !fullName || !email}>Add candidate</Button>
+          <div className="flex items-center gap-3">
+            <Button onClick={createCandidate} disabled={!candJobId || !fullName || !email}>Add candidate</Button>
+            {candidateAdded && <span className="text-sm text-green-600 font-medium">✓ Candidate added</span>}
+          </div>
           {candsQ.error ? <div className="text-sm text-red-600">{(candsQ.error as Error).message}</div> : null}
         </div>
       </div>
