@@ -12,6 +12,7 @@ from app.api.schemas_enterprise import MemoryUpsert, MemorySearch, MemoryOut
 from app.core.json_utils import json_safe
 from app.db.models import AuditEvent
 from app.services.ai_memory import upsert_memory, search_memory
+from app.services.embeddings_provider import EmbeddingError
 
 router = APIRouter(prefix="/ai/memory", tags=["ai"])
 
@@ -59,15 +60,21 @@ async def upsert(
             detail="ai_memories table is not available yet. Run the AI memory migration first.",
         )
 
-    mid = await upsert_memory(
-        db=db,
-        org_id=org_id,
-        namespace=payload.namespace,
-        content=payload.content,
-        metadata=payload.metadata,
-        entity_type=payload.entity_type,
-        entity_id=payload.entity_id,
-    )
+    try:
+        mid = await upsert_memory(
+            db=db,
+            org_id=org_id,
+            namespace=payload.namespace,
+            content=payload.content,
+            metadata=payload.metadata,
+            entity_type=payload.entity_type,
+            entity_id=payload.entity_id,
+        )
+    except EmbeddingError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{exc}. Set EMBEDDINGS_PROVIDER=mock for local dev or configure OPENAI_API_KEY.",
+        ) from exc
 
     db.add(
         AuditEvent(
@@ -104,13 +111,19 @@ async def search(
     if not await table_exists(db, "ai_memories"):
         return []
 
-    items = await search_memory(
-        db=db,
-        org_id=org_id,
-        namespace=payload.namespace,
-        query_text=payload.query,
-        k=payload.k,
-    )
+    try:
+        items = await search_memory(
+            db=db,
+            org_id=org_id,
+            namespace=payload.namespace,
+            query_text=payload.query,
+            k=payload.k,
+        )
+    except EmbeddingError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{exc}. Set EMBEDDINGS_PROVIDER=mock for local dev or configure OPENAI_API_KEY.",
+        ) from exc
 
     return [
         MemoryOut(

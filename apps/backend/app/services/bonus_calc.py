@@ -1,9 +1,11 @@
 from __future__ import annotations
+
+import json
 from typing import Any, Dict
 from uuid import UUID
+
+from sqlalchemy import String, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-import json
 
 def _rating_weight(rating: float | None) -> float:
     if rating is None:
@@ -41,21 +43,30 @@ async def calculate_bonus_pool(db: AsyncSession, org_id: UUID, pool_id: UUID, cy
         amt = round(total * (w / denom), 2)
         allocs.append({"employee_id": str(emp_id), "allocation_amount": amt, "basis": {"rating_weight": w}})
 
-    for a in allocs:
-        await db.execute(text("""
-            insert into public.bonus_allocations(org_id, pool_id, employee_id, allocation_amount, basis)
-            values (:org_id, :pool_id, :employee_id, :amt, :basis::jsonb)
-            on conflict (org_id, pool_id, employee_id)
-            do update set allocation_amount=excluded.allocation_amount, basis=excluded.basis
-        """), {
-            "org_id": str(org_id),
-            "pool_id": str(pool_id),
-            "employee_id": a["employee_id"],
-            "amt": a["allocation_amount"],
-            "basis": json.dumps(a["basis"]),
-        })
+    # Do not bind `basis` as postgresql.JSONB: the dialect renders `:basis::jsonb`, and asyncpg
+    # then mixes `$1..$4` with an untouched `:basis::jsonb` token → PostgresSyntaxError.
+    insert_alloc = text("""
+        insert into public.bonus_allocations(org_id, pool_id, employee_id, allocation_amount, basis)
+        values (:org_id, :pool_id, :employee_id, :amt, cast(:basis_json as jsonb))
+        on conflict (org_id, pool_id, employee_id)
+        do update set allocation_amount = excluded.allocation_amount, basis = excluded.basis
+    """).bindparams(bindparam("basis_json", type_=String))
 
-    await db.execute(text("update public.bonus_pools set status='calculated' where id=:id and org_id=:org_id"),
-                     {"id": str(pool_id), "org_id": str(org_id)})
-    await db.commit()
+    for a in allocs:
+        await db.execute(
+            insert_alloc,
+            {
+                "org_id": str(org_id),
+                "pool_id": str(pool_id),
+                "employee_id": a["employee_id"],
+                "amt": a["allocation_amount"],
+                "basis_json": json.dumps(a["basis"]),
+            },
+        )
+
+    await db.execute(
+        text("update public.bonus_pools set status = 'calculated' where id = :id and org_id = :org_id"),
+        {"id": str(pool_id), "org_id": str(org_id)},
+    )
+    # Caller commits with audit row in the same transaction.
     return {"total": total, "allocations": allocs}

@@ -25,9 +25,23 @@ export default function EscalationsPage() {
     await qc.invalidateQueries({ queryKey: ["esc_rules"] });
   }
 
+  const [runLoading, setRunLoading] = useState(false);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+
   async function run() {
-    await apiPost("/escalations/run", {});
-    await qc.invalidateQueries({ queryKey: ["escalations"] });
+    setRunLoading(true);
+    setRunError(null);
+    setRunMessage(null);
+    try {
+      await apiPost("/escalations/run", {});
+      await qc.invalidateQueries({ queryKey: ["escalations"] });
+      setRunMessage("Evaluator completed. Refresh the list below if counts changed.");
+    } catch (e) {
+      setRunError((e as Error).message || "Request failed");
+    } finally {
+      setRunLoading(false);
+    }
   }
 
   return (
@@ -50,11 +64,15 @@ export default function EscalationsPage() {
         <div className="rounded-2xl border border-black/10 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold">Run evaluator</div>
-            <Button onClick={run}>Run</Button>
+            <Button onClick={run} disabled={runLoading}>
+              {runLoading ? "Running…" : "Run"}
+            </Button>
           </div>
           <div className="text-xs text-black/60">
             The evaluator creates escalations for open cases and bumps level when overdue. Notification routing is stubbed.
           </div>
+          {runError ? <div className="text-xs text-red-600">{runError}</div> : null}
+          {runMessage ? <div className="text-xs text-green-700">{runMessage}</div> : null}
         </div>
       </div>
 

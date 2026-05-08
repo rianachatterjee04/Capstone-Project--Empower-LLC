@@ -12,15 +12,28 @@ export default function AiMemoryPage() {
   const [content, setContent] = useState("Harassment cases in 2025 were typically resolved in 36 hours with HR+Legal involvement.");
   const [query, setQuery] = useState("What do we usually do for harassment cases?");
   const [out, setOut] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function upsert() {
-    await apiPost("/ai/memory/upsert", { namespace, content, metadata: { source: "manual" } });
-    setOut({ ok: true, message: "Saved to tenant memory." });
+    setError(null);
+    try {
+      await apiPost("/ai/memory/upsert", { namespace, content, metadata: { source: "manual" } });
+      setOut({ ok: true, message: "Saved to tenant memory." });
+    } catch (e) {
+      setOut(null);
+      setError((e as Error).message || "Save failed");
+    }
   }
 
   async function search() {
-    const res = await apiPost("/ai/memory/search", { namespace, query, k: 5 });
-    setOut(res);
+    setError(null);
+    try {
+      const res = await apiPost("/ai/memory/search", { namespace, query, k: 5 });
+      setOut(res);
+    } catch (e) {
+      setOut(null);
+      setError((e as Error).message || "Search failed");
+    }
   }
 
   return (
@@ -45,6 +58,10 @@ export default function AiMemoryPage() {
           <Button onClick={search}>Search</Button>
         </div>
       </div>
+
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>
+      ) : null}
 
       {out ? (
         <div className="rounded-2xl border border-black/10 p-4">

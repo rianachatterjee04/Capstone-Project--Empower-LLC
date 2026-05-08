@@ -11,22 +11,23 @@ export default function BonusesPage() {
 
   const [name, setName] = useState("Annual Bonus Pool");
   const [total, setTotal] = useState(100000);
+  const [error, setError] = useState<string | null>(null);
 
   async function create() {
-    await apiPost("/bonuses/pools", { name, total_amount: total, currency: "USD" });
-    await qc.invalidateQueries({ queryKey: ["bonus_pools"] });
-  }
-
-  async function calc(id: string) {
-    await apiPost(`/bonuses/pools/${id}/calculate`, {});
-    await qc.invalidateQueries({ queryKey: ["bonus_pools"] });
+    setError(null);
+    try {
+      await apiPost("/bonuses/pools", { name, total_amount: total, currency: "USD" });
+      await qc.invalidateQueries({ queryKey: ["bonus_pools"] });
+    } catch (e) {
+      setError((e as Error).message || "Create failed");
+    }
   }
 
   return (
     <div className="space-y-6">
       <div>
         <div className="text-2xl font-semibold">Bonus Pools</div>
-        <div className="text-sm text-black/60">Payout calculator based on performance rating weights (extendable).</div>
+        <div className="text-sm text-black/60">Create and list bonus pools. Allocation is handled outside this page for now.</div>
       </div>
 
       <div className="rounded-2xl border border-black/10 p-4 space-y-3">
@@ -36,16 +37,17 @@ export default function BonusesPage() {
         <Button onClick={create}>Create</Button>
       </div>
 
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>
+      ) : null}
+
       <div className="rounded-2xl border border-black/10 p-4">
         <div className="text-sm font-semibold">Pools</div>
         <div className="mt-4 space-y-2">
           {(poolsQ.data ?? []).map((p) => (
-            <div key={p.id} className="rounded-xl border border-black/10 p-3 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{p.name}</div>
-                <div className="text-xs text-black/60">Total: {p.total_amount} • Status: {p.status}</div>
-              </div>
-              <Button onClick={() => calc(p.id)}>Calculate</Button>
+            <div key={p.id} className="rounded-xl border border-black/10 p-3">
+              <div className="font-medium">{p.name}</div>
+              <div className="text-xs text-black/60">Total: {p.total_amount} • Status: {p.status}</div>
             </div>
           ))}
         </div>

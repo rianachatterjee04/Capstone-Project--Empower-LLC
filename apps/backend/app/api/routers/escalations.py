@@ -187,7 +187,7 @@ async def run_escalations(
     actor: Actor = Depends(require_org),
     db: AsyncSession = Depends(db_session),
 ):
-    if actor.role not in ("owner", "admin", "hr"):
+    if actor.role not in ("owner", "admin", "hr", "manager"):
         raise HTTPException(status_code=403, detail="Not allowed")
 
     org_id = as_uuid(actor.org_id)

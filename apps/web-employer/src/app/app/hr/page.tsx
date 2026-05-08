@@ -2,9 +2,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 
-type Employee = { id: string; full_name: string; email: string; job_title?: string | null; department?: string | null; status: string; created_at: string };
+type Employee = {
+  id: string;
+  legal_name: string;
+  preferred_name?: string | null;
+  email: string;
+  job_title?: string | null;
+  department?: string | null;
+  status: string;
+  created_at: string;
+};
+
+function employeeDisplayName(emp: Employee): string {
+  const pref = emp.preferred_name?.trim();
+  if (pref) return pref;
+  return emp.legal_name?.trim() || emp.email;
+}
 type Case = { id: string; title: string; status: string; severity?: string | null; created_at: string };
-type EscalationRule = { id: string; name: string; trigger_type: string; is_active: boolean };
+type EscalationRule = { id: string; name: string; entity_type: string; is_active: boolean };
 
 function Badge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -79,8 +94,10 @@ export default function HRPage() {
             {employees.map((emp) => (
               <div key={emp.id} className="flex items-center justify-between px-5 py-3 hover:bg-black/[0.02]">
                 <div>
-                  <div className="text-sm font-medium">{emp.full_name}</div>
-                  <div className="text-xs text-black/50">{emp.job_title ?? "—"} · {emp.department ?? "—"}</div>
+                  <div className="text-sm font-medium">{employeeDisplayName(emp)}</div>
+                  <div className="text-xs text-black/50">
+                    {[emp.email, emp.job_title, emp.department].filter(Boolean).join(" · ") || "—"}
+                  </div>
                 </div>
                 <Badge status={emp.status} />
               </div>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,6 +27,18 @@ async def table_exists(db: AsyncSession, table_name: str) -> bool:
         {"table_name": f"public.{table_name}"},
     )
     return result.scalar() is not None
+
+
+async def documents_column_names(db: AsyncSession) -> set[str]:
+    """Public.documents columns (for choosing UPDATE shape without failing a statement)."""
+    r = await db.execute(
+        text("""
+            select column_name
+            from information_schema.columns
+            where table_schema = 'public' and table_name = 'documents'
+        """)
+    )
+    return {row[0] for row in r.fetchall()}
 
 
 # =========================================================
@@ -84,15 +96,26 @@ async def assign(
             detail="documents table is not available yet. Run the documents migration first.",
         )
 
-    result = await db.execute(
-        text("""
-            update public.documents
-            set reviewer_employee_id = :rid,
-                status = 'in_review'
-            where id = :id and org_id = :org_id
-        """),
-        {"rid": reviewer_id, "id": doc_uuid, "org_id": org_id},
-    )
+    cols = await documents_column_names(db)
+    if "reviewer_employee_id" in cols:
+        result = await db.execute(
+            text("""
+                update public.documents
+                set reviewer_employee_id = :rid,
+                    status = 'in_review'
+                where id = :id and org_id = :org_id
+            """),
+            {"rid": reviewer_id, "id": doc_uuid, "org_id": org_id},
+        )
+    else:
+        result = await db.execute(
+            text("""
+                update public.documents
+                set status = 'in_review'
+                where id = :id and org_id = :org_id
+            """),
+            {"id": doc_uuid, "org_id": org_id},
+        )
 
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -146,27 +169,43 @@ async def verify(
     if status not in ("verified", "rejected", "in_review"):
         raise HTTPException(status_code=400, detail="Invalid status")
 
-    expires_at = None
+    expires_at_val: date | None = None
     if expires_days and status == "verified":
-        expires_at = datetime.utcnow() + timedelta(days=int(expires_days))
+        expires_at_val = (datetime.utcnow() + timedelta(days=int(expires_days))).date()
 
-    result = await db.execute(
-        text("""
-            update public.documents
-            set status = :status,
-                rejection_reason = :reason,
-                expires_at = :expires_at,
-                verified_at = now()
-            where id = :id and org_id = :org_id
-        """),
-        {
-            "status": status,
-            "reason": reason,
-            "expires_at": expires_at,
-            "id": doc_uuid,
-            "org_id": org_id,
-        },
-    )
+    params = {
+        "status": status,
+        "reason": reason,
+        "expires_at": expires_at_val,
+        "id": doc_uuid,
+        "org_id": org_id,
+    }
+
+    cols = await documents_column_names(db)
+    has_extended = "rejection_reason" in cols and "verified_at" in cols
+
+    if has_extended:
+        result = await db.execute(
+            text("""
+                update public.documents
+                set status = :status,
+                    rejection_reason = case when :status = 'rejected' then :reason else null end,
+                    expires_at = coalesce(cast(:expires_at as date), expires_at),
+                    verified_at = case when :status = 'verified' then now() else verified_at end
+                where id = :id and org_id = :org_id
+            """),
+            params,
+        )
+    else:
+        result = await db.execute(
+            text("""
+                update public.documents
+                set status = :status,
+                    expires_at = coalesce(cast(:expires_at as date), expires_at)
+                where id = :id and org_id = :org_id
+            """),
+            params,
+        )
 
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -182,7 +221,7 @@ async def verify(
             payload={
                 "status": status,
                 "reason": reason,
-                "expires_at": str(expires_at) if expires_at else None,
+                "expires_at": str(expires_at_val) if expires_at_val else None,
             },
         )
     )
@@ -258,7 +297,7 @@ async def lock(
     result = await db.execute(
         text("""
             update public.documents
-            set locked = true
+            set is_locked = true
             where id = :id and org_id = :org_id
         """),
         {"id": doc_uuid, "org_id": org_id},

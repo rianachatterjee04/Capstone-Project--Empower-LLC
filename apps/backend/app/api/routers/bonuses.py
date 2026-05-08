@@ -1,10 +1,12 @@
 from __future__ import annotations
+
+import json
+
 from app.core.json_utils import json_safe
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import String, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from app.core.json_utils import json_safe
 from uuid import UUID
 from decimal import Decimal
 from datetime import date, datetime
@@ -107,12 +109,15 @@ async def calc(
     target_pool_id = as_uuid(pool_id)
     cycle_id = payload.get("cycle_id")
 
-    result = await calculate_bonus_pool(
-        db,
-        org_id,
-        target_pool_id,
-        as_uuid(cycle_id) if cycle_id else None,
-    )
+    try:
+        result = await calculate_bonus_pool(
+            db,
+            org_id,
+            target_pool_id,
+            as_uuid(cycle_id) if cycle_id else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     db.add(
         AuditEvent(
@@ -122,7 +127,7 @@ async def calc(
             event_type="bonus_pool.calculated",
             entity_type="bonus_pool",
             entity_id=target_pool_id,
-            payload=result,
+            payload=json_safe(result),
         )
     )
 
@@ -154,19 +159,18 @@ async def adjust(
     await db.execute(
         text("""
             update public.bonus_allocations
-            set amount = :amt,
-                adjusted = true,
-                adjusted_reason = :reason
+            set allocation_amount = :amt,
+                basis = basis || cast(:patch_json as jsonb)
             where org_id = :org_id
               and pool_id = :pool
               and employee_id = :emp
-        """),
+        """).bindparams(bindparam("patch_json", type_=String)),
         {
             "org_id": org_id,
             "pool": as_uuid(pool_id),
             "emp": as_uuid(employee_id),
             "amt": new_amount,
-            "reason": reason,
+            "patch_json": json.dumps({"manual_adjustment": True, "reason": reason}),
         },
     )
 
@@ -203,8 +207,7 @@ async def finalize(
     await db.execute(
         text("""
             update public.bonus_pools
-            set status = 'finalized',
-                finalized_at = now()
+            set status = 'approved'
             where org_id = :org_id
               and id = :id
         """),
@@ -240,7 +243,7 @@ async def my_bonus(
     row = (
         await db.execute(
             text("""
-                select bp.name, ba.amount, bp.currency, bp.status
+                select bp.name, ba.allocation_amount, bp.currency, bp.status
                 from public.bonus_allocations ba
                 join public.bonus_pools bp on bp.id = ba.pool_id
                 join public.employees e on e.id = ba.employee_id
