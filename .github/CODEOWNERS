@@ -1,0 +1,42 @@
+# Fintra — code ownership per module.
+#
+# Each engineer governs (must review/approve changes to) only their package(s).
+# Combine with branch protection on `main`:
+#   Settings → Branches → add rule for `main` →
+#     ☑ Require a pull request before merging
+#     ☑ Require review from Code Owners
+#     ☑ Dismiss stale approvals, ☑ Require status checks
+#
+# NOTE (read-access tradeoff): in a single private repo, CODEOWNERS governs
+# WRITE/REVIEW, not READ — every collaborator can still read all packages.
+# True per-engineer READ isolation would require splitting into separate repos.
+# This is an accepted, documented choice to keep monorepo ergonomics.
+#
+# Replace the @placeholder handles below with real GitHub usernames/teams.
+
+# ---- Accounting & FP&A ----
+/packages/api/                @accounting-eng
+/packages/app/                @accounting-eng @frontend-eng
+
+# ---- Compliance (AuditWise) ----
+/packages/sentri/             @compliance-eng
+/packages/sentri-api/         @compliance-eng
+
+# ---- People / HR ----
+/packages/hr-api/             @hr-eng
+/packages/hr-web-employer/    @hr-eng
+/packages/hr-web-employee/    @hr-eng
+/packages/hr-mobile/          @hr-eng
+/packages/hr-mobile-exec/     @hr-eng
+/packages/hr-ai-orchestrator/ @hr-eng
+
+# ---- Platform (owner only): licensing, AI gateway, shared, console, marketing ----
+/packages/control-api/        @jaimani11
+/packages/ai-gateway/         @jaimani11
+/packages/shared-py/          @jaimani11
+/packages/shared/             @jaimani11
+/packages/console/            @jaimani11 @frontend-eng
+/packages/web/                @jaimani11 @frontend-eng
+/.github/                     @jaimani11
+/package.json                 @jaimani11
+/docs/                        @jaimani11

@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* -------------------------------------------------------------
+   Foundry People — global base
+   Calm, premium, enterprise minimalism.
+
+   Tokens live as CSS variables so dark mode can swap them without
+   re-issuing every utility. Tailwind config reads var(--fp-*).
+   ------------------------------------------------------------- */
+
+:root {
+  /* AuditWise light palette */
+  --fp-canvas: #F8FAFC;            /* page background */
+  --fp-surface: #FFFFFF;           /* cards / surfaces */
+  --fp-sunken: #F1F5F9;            /* muted / inset */
+  --fp-line: #E2E8F0;              /* borders */
+  --fp-rule: #EEF2F6;             /* faint hairline */
+  --fp-ink: #0F172A;               /* primary text */
+  --fp-body: #475569;              /* secondary text */
+  --fp-muted: #64748B;             /* muted text */
+  --fp-faint: #94A3B8;             /* helper / faint */
+  --fp-accent: #0F766E;            /* brand teal */
+  --fp-accent-fg: #FFFFFF;         /* text on accent */
+  --fp-accent-soft: #CCFBF1;       /* soft teal tint */
+  --fp-accent-soft-fg: #115E59;    /* text on soft tint (teal hover) */
+}
+
+/* AuditWise is a single light theme by design. There is no dark palette and no
+   theme toggle — every token above is the source of truth for the whole app. */
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: theme('colors.canvas');
+  color: theme('colors.ink');
+  font-family: Arial, Helvetica, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* App scaffolding */
+.fp-eyebrow {
+  font-size: 10.5px;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: theme('colors.muted');
+  font-weight: 600;
+}
+
+.fp-card {
+  background: theme('colors.surface');
+  border: 1px solid theme('colors.line');
+  border-radius: theme('borderRadius.lg');
+}
+
+.fp-hairline { border-color: theme('colors.line'); }
+.fp-hairline-soft { border-color: theme('colors.rule'); }
+
+/* Focus rings — calm, single hairline (AuditWise teal) */
+*:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.5);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Selection */
+::selection { background: rgba(15, 118, 110, 0.16); }
+
+/* Scrollbar — slim and neutral (slate) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 8px;
+  border: 2px solid theme('colors.canvas');
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 0.55); }
+
+/* Animation primitives */
+@keyframes fp-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fp-slide-in-right { from { transform: translateX(16px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+.fp-fade-in { animation: fp-fade-in 200ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.fp-slide-in { animation: fp-slide-in-right 200ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }

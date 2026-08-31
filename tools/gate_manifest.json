@@ -1,0 +1,170 @@
+{
+  "note": "Required evidence classes. A critical suite that vanishes, collects zero tests, or does not execute makes the gate GATE_INCOMPLETE -- not green. The evidence pipeline has failed three distinct ways in this repository (async plugin stripping, skipped PostgreSQL controls, concurrent runs clobbering output), and each time the gate reported success while measuring less than it claimed.",
+  "suites": [
+    {
+      "id": "payroll-core",
+      "package": "payroll",
+      "path": "tests",
+      "critical": true,
+      "min_tests": 700,
+      "why": "statutory calculation, obligations, artifacts, gateway, payment, reconciliation"
+    },
+    {
+      "id": "payroll-postgres",
+      "package": "payroll",
+      "path": "tests/test_execution_intent_pg.py",
+      "critical": true,
+      "min_tests": 25,
+      "requires_env": "FINTRA_PAYROLL_PG_ADMIN_DSN",
+      "why": "the database-enforced single-economic-effect control. Skipping this was how a green gate certified a tree whose central control was never exercised."
+    },
+    {
+      "id": "payroll-schema",
+      "package": "payroll",
+      "path": "tests/test_schema_migrations_pg.py",
+      "critical": true,
+      "min_tests": 10,
+      "requires_env": "FINTRA_PAYROLL_PG_ADMIN_DSN",
+      "why": "migrations proved against real PostgreSQL, and model/schema drift detection"
+    },
+    {
+      "id": "payroll-state-graph",
+      "package": "payroll",
+      "path": "tests/test_state_graph.py",
+      "critical": true,
+      "min_tests": 18,
+      "why": "reachability invariants; a dangerous edge added later must fail CI"
+    },
+    {
+      "id": "payroll-ack-origin",
+      "package": "payroll",
+      "path": "tests/test_acknowledgment_origin.py",
+      "critical": true,
+      "min_tests": 20,
+      "why": "a matching artifact hash is not evidence of authorship"
+    },
+    {
+      "id": "payroll-artifacts",
+      "package": "payroll",
+      "path": "tests/test_return_artifact.py",
+      "critical": true,
+      "min_tests": 15,
+      "why": "authorization binds to bytes; regeneration breaks it"
+    },
+    {
+      "id": "payroll-gateway",
+      "package": "payroll",
+      "path": "tests/test_gateway_uncertain.py",
+      "critical": true,
+      "min_tests": 20,
+      "why": "STATE_UNCERTAIN; a timeout must never authorize a second filing"
+    },
+    {
+      "id": "payroll-payment",
+      "package": "payroll",
+      "path": "tests/test_payment.py",
+      "critical": true,
+      "min_tests": 30,
+      "why": "payment authorization binding across every material field"
+    },
+    {
+      "id": "payroll-reconciliation",
+      "package": "payroll",
+      "path": "tests/test_reconciliation.py",
+      "critical": true,
+      "min_tests": 18,
+      "why": "three truths; no leg substitutes for another"
+    },
+    {
+      "id": "payroll-adapters",
+      "package": "payroll",
+      "path": "tests/test_edd_adapter.py",
+      "critical": true,
+      "min_tests": 20,
+      "why": "agency boundaries reported truthfully, never fabricated"
+    },
+    {
+      "id": "commit-gate",
+      "package": "payroll",
+      "path": "tests/test_commit_gate.py",
+      "critical": true,
+      "min_tests": 5,
+      "why": "the gate's own behaviour, proven in a disposable repo"
+    },
+    {
+      "id": "market",
+      "package": "api",
+      "path": "tests/market",
+      "critical": true,
+      "min_tests": 60,
+      "why": "source rights, fact-level provenance, egress enforcement"
+    },
+    {
+      "id": "egress",
+      "package": "api",
+      "path": "tests/test_egress_inventory.py",
+      "critical": true,
+      "min_tests": 5,
+      "why": "a new outbound dependency must fail CI before it ships"
+    },
+    {
+      "id": "growth",
+      "package": "api",
+      "path": "tests/growth",
+      "critical": true,
+      "min_tests": 100,
+      "why": "observation provenance, economic authority, ledger chain"
+    },
+    {
+      "id": "api",
+      "package": "api",
+      "path": "tests",
+      "critical": true,
+      "min_tests": 5000,
+      "why": "the integrated suite"
+    },
+    {
+      "id": "aegis",
+      "package": "aegis",
+      "path": "tests",
+      "critical": false,
+      "min_tests": 100,
+      "why": "async suite; the canary for plugin-autoload damage"
+    },
+    {
+      "id": "brain-api",
+      "package": "brain-api",
+      "path": "tests",
+      "critical": false,
+      "min_tests": 8,
+      "why": "import/startup/health and the internal-secret auth boundary. This package collected ZERO tests until now -- tests/test_brain.py is a script with no pytest functions, so the directory looked covered while CI measured nothing."
+    },
+    {
+      "id": "hr-api",
+      "package": "hr-api",
+      "path": "tests",
+      "critical": true,
+      "min_tests": 440,
+      "why": "HR equity integrity: plpgsql triggers and READ COMMITTED re-evaluation of conditional UPDATEs. 161 of these SKIPPED for want of a DSN; provision one with packages/hr-api/scripts/ephemeral_equity_db.sh. Pointing them at the live fintra_hr database is out of bounds -- they INSERT org rows.",
+      "requires_env": "FINTRA_HR_PG_DSN"
+    },
+    {
+      "id": "hr-interview",
+      "package": "hr-api",
+      "path": "tests/test_interview_planning_pg.py tests/test_interview_schema_pg.py tests/test_interview_tenancy_pg.py tests/test_interview_e2e_pg.py tests/test_interview_fairness.py tests/test_llm_wiring.py",
+      "critical": true,
+      "min_tests": 60,
+      "why": "the evidence chain: claim provenance, personalised planning, adaptive probing, scoring that returns INSUFFICIENT_EVIDENCE rather than a made-up number, and the cross-tenant attacks. Needs FINTRA_INTERVIEW_PG_DSN pointed at a database built by scripts/ephemeral_interview_db.sh -- the skip guard probes for a table, not for a string, because FINTRA_HR_PG_DSN is set repo-wide and points at a database WITHOUT this schema. min_tests was first set to 90 by estimate rather than measurement, which made a fully passing suite report GATE_INCOMPLETE. It is a tripwire for a suite that has vanished or collects nothing, not a target, so it sits just below the real count.",
+      "requires_env": "FINTRA_INTERVIEW_PG_DSN"
+    },
+    {
+      "id": "trucking",
+      "package": "hr-api",
+      "path": "tests/test_trucking_controls.py tests/test_trucking_tenancy_pg.py",
+      "critical": true,
+      "min_tests": 40,
+      "why": "driver and carrier eligibility failing closed, POD gating billing, unapproved accessorials excluded, W-2 pay routed to payroll rather than paid, margin graded by its weakest cost, and cross-tenant writes on freight and money.",
+      "requires_env": "FINTRA_INTERVIEW_PG_DSN"
+    }
+  ]
+}

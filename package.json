@@ -1,0 +1,19 @@
+{
+  "name": "fintra-people",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Foundry People — HR API and the employer and employee web apps.",
+  "comment:ports": "hr-api 8000 · hr-web-employer 3001 (basePath /people) · hr-web-employee 3002",
+  "scripts": {
+    "dev": "concurrently -n hr-api,employer,employee -c red,cyan,magenta \"npm run dev:hr-api\" \"npm run dev:hr-employer\" \"npm run dev:hr-employee\"",
+    "dev:hr-api": "bash -c 'cd packages/hr-api && { [ -d .venv ] && . .venv/bin/activate; } ; set -a; [ -f .env ] && . ./.env; set +a; ENV=${ENV:-development} uvicorn app.main:app --reload --port 8000'",
+    "dev:hr-employer": "npm --prefix packages/hr-web-employer run dev",
+    "dev:hr-employee": "npm --prefix packages/hr-web-employee run dev",
+    "build": "npm --prefix packages/hr-web-employer run build && npm --prefix packages/hr-web-employee run build",
+    "test": "./tools/gate.sh all",
+    "install:all": "npm --prefix packages/hr-web-employer install && npm --prefix packages/hr-web-employee install && echo '\\nJS deps installed. For the API: cd packages/hr-api && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt && pip install -e ../shared-py'"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

@@ -1,0 +1,122 @@
+# Every table the HR application expects on a fresh database.
+#
+# Generated from a database built by scripts/bootstrap_supabase.py, which runs
+# init_models() then every file in migrations/. The bootstrap checks its result
+# against this list and FAILS if anything is missing — a Supabase that is
+# quietly short cannot report success, which is exactly what happened before
+# (46 tables where 120 were needed) and was found one broken screen at a time.
+#
+# Cap table is NOT in this build: no equity_* table appears here on purpose.
+#
+# Regenerate after adding a migration:
+#   createdb hr_schema_check
+#   DATABASE_URL=postgresql+asyncpg:///hr_schema_check python3 scripts/bootstrap_supabase.py
+#   psql -qtAX -d hr_schema_check -c "select table_name from information_schema.tables where table_schema='public' order by 1"
+action_items
+agenda_items
+ai_onboarding_runs
+ai_productivity
+ai_skills
+approval_actions
+approval_authority
+approval_requests
+assessment_evidence
+audit_events
+benefit_enrollment_windows
+benefit_life_events
+benefit_optimization_runs
+benefit_plans
+bonus_allocations
+bonus_pools
+candidate_claims
+candidates
+cases
+cfo_scenarios
+checklist_tasks
+checklist_templates
+checklists
+claim_verification_evidence
+claim_verifications
+commercial_actions
+commercial_attributions
+commercial_prospects
+commercial_sources
+comp_cycles
+comp_history
+comp_proposals
+comp_records
+competency_assessments
+driver_credentials
+emergency_contacts
+employee_benefit_elections
+employees
+engagement_surveys
+escalation_rules
+escalations
+integration_connections
+integration_events
+interview_answers
+interview_attempts
+interview_competencies
+interview_consents
+interview_events
+interview_evidence
+interview_plans
+interview_questions
+interview_role_configs
+interview_scorecards
+interview_summaries
+interviews
+job_history
+job_postings
+key_results
+market_benchmarks
+nine_box_placements
+objectives
+onboarding_packet_requests
+onboarding_packets
+onboarding_templates
+one_on_one_meetings
+one_on_one_series
+one_on_one_talking_points
+org_nodes
+org_security_settings
+orgs
+payroll_agent_runs
+payroll_alerts
+payroll_evidence
+payroll_trust_scores
+performance_cycles
+performance_reviews
+policies
+policy_executions
+policy_rules
+policy_versions
+proof_of_delivery
+pto_requests
+recognition_reactions
+recognitions
+recording_assets
+survey_questions
+survey_responses
+time_off_ledger
+time_off_policies
+time_off_policy_assignments
+transcript_segments
+trucking_accessorials
+trucking_carriers
+trucking_customers
+trucking_drivers
+trucking_equipment
+trucking_invoices
+trucking_load_costs
+trucking_load_events
+trucking_loads
+trucking_rate_confirmations
+trucking_settlements
+user_profiles
+view_events
+wf_ai_proficiency
+wf_ai_sessions
+wf_coaching_notes
+workforce_registry

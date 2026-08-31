@@ -1,0 +1,75 @@
+{
+  "_what_this_is": [
+    "A SYNTHETIC stage-1 market artifact, so the commercial loop can be",
+    "demonstrated without a live Census or FMCSA call. Every business named",
+    "below is invented. No row here came from a public register, and nothing",
+    "in it should be presented as a real company or a real observation.",
+    "",
+    "It exists because the loop refused to run at all without an artifact, and",
+    "no sample was committed -- so the Market -> Growth -> Marketing -> customer",
+    "-> load -> margin story, which is the whole commercial argument, could not",
+    "be shown from a clean checkout. The honest answer to 'no artifact' was an",
+    "empty Growth page, and an empty page is not a demo.",
+    "",
+    "THE RIGHTS SEMANTICS ARE REAL, and are the point of the fixture. Two",
+    "sources: one public register that does NOT license outreach, and one",
+    "first-party list that does. The loop must refuse to market to the first",
+    "and allow the second. Changing permits_direct_marketing to true on the",
+    "register would make this fixture a lie AND make the demo prove nothing.",
+    "",
+    "identity_strength uses the vocabulary commercial_prospects_identity_ck accepts: NAMED_ONLY, ADDRESS_MATCHED, VERIFIED, SELF_IDENTIFIED. A first draft of this fixture said CORROBORATED -- a word from the authority ladder that this column does not take -- and the database refused the insert, which is the constraint doing exactly its job.",
+    "",
+    "ORDER MATTERS. demo_commercial_loop.py takes candidates[0] and files it under a PUBLIC_REGISTER source, because demonstrating the outreach refusal is the point of that step. The register-sourced candidate is therefore first here; with them the other way round the page labelled an inbound enquiry 'no outreach licence', which is the wrong story and a fixture contradicting itself on screen."
+  ],
+  "generated": "DEMO_SIMULATED",
+  "market": {
+    "query": {
+      "industry": "refrigerated trucking",
+      "zip_code": "78045",
+      "radius_miles": 50
+    },
+    "named_businesses": 2,
+    "coverage": {
+      "grade": "PARTIAL",
+      "limiting_factor": "a synthetic fixture names two businesses; a real scan is bounded by the source's own coverage"
+    },
+    "population_note": "This artifact is DEMO_SIMULATED. It names no real business and establishes nothing about any real market.",
+    "sources": [
+      {
+        "name": "FMCSA carrier register (simulated)",
+        "kind": "PUBLIC_REGISTER",
+        "permits_direct_marketing": false,
+        "licence_note": "A carrier register is readable. Being able to read it is not permission to run a campaign against the businesses in it."
+      },
+      {
+        "name": "Own inbound enquiries (simulated)",
+        "kind": "FIRST_PARTY",
+        "permits_direct_marketing": true,
+        "licence_note": "These businesses contacted us. No third-party licence is required to reply to them."
+      }
+    ],
+    "candidates": [
+      {
+        "name": "Sierra Haul Logistics (demo)",
+        "source": "FMCSA carrier register (simulated)",
+        "identity_strength": "NAMED_ONLY",
+        "note": "named by the register only. NAMED_ONLY, and outreach is not licensed"
+      },
+      {
+        "name": "Rio Verde Cold Chain (demo)",
+        "source": "Own inbound enquiries (simulated)",
+        "identity_strength": "SELF_IDENTIFIED",
+        "note": "asked for reefer capacity out of Laredo \u2014 SELF_IDENTIFIED because they named themselves to us; nothing here corroborates it"
+      }
+    ]
+  },
+  "diagnosis": {
+    "headline": "Reefer capacity out of Laredo is being turned away in the window this shipper needs.",
+    "confidence": "MODELED",
+    "basis": "a synthetic fixture, not a measured market"
+  },
+  "website": {
+    "url": "https://example.invalid/demo",
+    "note": "DEMO_SIMULATED \u2014 no site was fetched."
+  }
+}

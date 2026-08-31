@@ -1,0 +1,157 @@
+# The suite, actually run.
+#
+# WHAT WAS HERE BEFORE
+# A job called "test" whose only step was `echo "Weekly workflow works!"`, behind
+# workflow_dispatch so it never fired. That is worse than having no CI: it puts a
+# green check next to a commit and the check means nothing. It is also how 199
+# tests sat in the ERROR column for months while the summary line read "passed".
+#
+# THE TWO GUARDS THAT MATTER MOST are not the pass/fail of the suite. They are:
+#
+#   * COLLECTION ERRORS FAIL THE BUILD. A test that errors during setup is not a
+#     failing test, it is an absent one, and pytest reports it in a column people
+#     do not read. Zero is the only acceptable number.
+#   * THE COLLECTED COUNT HAS A FLOOR. A suite can shrink silently — a bad import,
+#     a renamed fixture, a deleted file — and every remaining test still passes.
+#     The floor turns "the suite got smaller" into a build failure.
+#
+# Both exist because the failure mode here has never been "a test went red". It
+# has been "a test stopped running and nobody noticed".
+#
+# THIS IS THE HR-ONLY BUILD. The accounting, payroll, growth and mutation jobs
+# that used to run here targeted packages that are not in this repo, and their
+# MIN_COLLECTED floor of 5800 referred to a suite that no longer exists — CI
+# would have failed on the first push for reasons that had nothing to do with
+# the code. The floors below are measured against this build.
+
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"          # Monday, so a week of drift surfaces on Monday
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hr-api:
+    name: HR, interview, trucking suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packages/hr-api
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      SUPABASE_URL: https://dummy.supabase.co
+      SUPABASE_KEY: dummy
+      # 2026-08-31: measured 1232 collected (1231 passed, 1 skipped) on this
+      # build. Raise deliberately; never lower without a reason.
+      MIN_COLLECTED: "1200"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: packages/hr-api/requirements.txt
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+          sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+
+      - name: Provision the throwaway database
+        run: ./scripts/ephemeral_interview_db.sh fintra_iv_ci
+
+      # A SKIPPED SUITE IS A FALSE GREEN, which is the whole reason the local
+      # gate provisions this at all: without the DSN those tests skip and the
+      # summary line still says passed.
+      - name: Run the suite
+        env:
+          FINTRA_INTERVIEW_PG_DSN: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/fintra_iv_ci
+        run: |
+          set -o pipefail
+          python -m pytest tests -q -rs 2>&1 | tee /tmp/hr.txt
+
+      - name: The database-backed tests must not have skipped
+        run: |
+          if grep -qE 'set FINTRA_(HR|INTERVIEW)_PG_DSN' /tmp/hr.txt; then
+            echo "::error::database-backed tests skipped. In CI that is a false green."
+            grep -E 'set FINTRA_(HR|INTERVIEW)_PG_DSN' /tmp/hr.txt | head -5
+            exit 1
+          fi
+
+      - name: The suite must not have shrunk
+        run: |
+          n="$(grep -oE '[0-9]+ passed' /tmp/hr.txt | tail -1 | grep -oE '[0-9]+')"
+          echo "collected/passed: ${n:-0}, floor: ${MIN_COLLECTED}"
+          if [ "${n:-0}" -lt "${MIN_COLLECTED}" ]; then
+            echo "::error::suite shrank to ${n:-0}, below the floor of ${MIN_COLLECTED}."
+            exit 1
+          fi
+
+  # =========================================================================
+  # The browser-facing guards, plus a real compile of BOTH frontends.
+  #
+  # The compile step is not decoration. The local gate reported 1337 passing
+  # while the employee portal returned HTTP 500 and the employer app could not
+  # compile its audit page — both importing a module that had been deleted. No
+  # Python test compiles TypeScript, and the node suite reads source as text.
+  #
+  # ./node_modules/.bin/tsc is used deliberately instead of `npx tsc`: a bare
+  # tsc on PATH resolved to an unrelated binary that printed a message and
+  # exited 1, and a grep for "error TS" in its output found nothing, which read
+  # as clean. Exit status is what is trusted here.
+  # =========================================================================
+  web-guards:
+    name: Frontend guards and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pkg: hr-web-employer
+            has_tests: true
+          - pkg: hr-web-employee
+            has_tests: false
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.pkg }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/${{ matrix.pkg }}/package-lock.json
+      - run: npm ci
+      - name: Guards
+        if: matrix.has_tests
+        run: npm run test:ui
+      - name: Types
+        run: ./node_modules/.bin/tsc --noEmit

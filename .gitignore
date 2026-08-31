@@ -1,27 +1,39 @@
-# Node
 node_modules/
-package-lock.json
+dist/
 .next/
-.expo/
-old/
-
-# Env files
-.env
-.env.local
-
-# Python
 __pycache__/
 *.pyc
 .venv/
-
-# Archives (local backups)
-*.zip
-
-# Supabase CLI local cache
-infra/supabase/supabase/.temp/
-
-# Mac
+venv/
+# Environment files: ignore every variant, but keep committed *.example templates.
+.env
+.env.*
+!.env.example
+!*.env.example
 .DS_Store
 
-# Conda installer
-Miniconda3-latest-MacOSX-arm64.sh
+# next-pwa generated service worker artifacts (build output)
+packages/app/public/sw.js
+packages/app/public/sw.js.map
+packages/app/public/workbox-*.js
+packages/app/public/workbox-*.js.map
+packages/app/public/fallback-*.js
+
+# AuditWise local SQLite dev DB
+*.db
+*.db-journal
+
+# sentri-api local runtime state (auto-seeded from code via _seed_if_empty, mutated at runtime)
+packages/sentri-api/data/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Python editable-install metadata
+*.egg-info/
+.pytest_cache/
+
+# Private IP / patent due-diligence material. Contains a map of internal
+# architecture and must not be committed or published. Scoped to docs/ip/ only,
+# so the rest of docs/ (manuals, ADRs, architecture, gtm) stays versioned.
+docs/ip/

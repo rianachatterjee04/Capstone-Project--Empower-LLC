@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Fintra commit gate.
+#
+# WHY THIS EXISTS
+# Two commits in one session shipped with failing tests -- not because anyone
+# decided to, but because a compound shell command ran the suite and the commit
+# together and nothing gated one on the other. Remembering not to do that is
+# not a control. This is.
+#
+# WHAT IT DOES
+# If a commit touches a guarded package, that package's suite must pass before
+# the commit is allowed. Commits that touch nothing guarded exit immediately,
+# so the hook costs nothing on unrelated work.
+#
+# BYPASS
+# Deliberate and visible: FINTRA_GATE_BYPASS="<reason>" git commit ...
+# The reason is required, it is printed, and it is appended to the commit
+# message trailer so the bypass is visible in the history rather than only in
+# whoever's terminal ran it.
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$STAGED" ] && exit 0
+
+# package-path-prefix : test command (run from the package directory)
+GUARDED_PATHS=("packages/payroll")
+GUARDED_CMDS=("python3 -m pytest tests -q --no-header -p no:cacheprovider -p no:pytest_ethereum")
+
+fail() { printf '\033[31m%s\033[0m\n' "$*" >&2; }
+ok()   { printf '\033[32m%s\033[0m\n' "$*"; }
+
+for i in "${!GUARDED_PATHS[@]}"; do
+  pkg="${GUARDED_PATHS[$i]}"
+  cmd="${GUARDED_CMDS[$i]}"
+  echo "$STAGED" | grep -q "^${pkg}/" || continue
+
+  echo "── commit gate: ${pkg} ──────────────────────────────────────"
+  if [ -n "${FINTRA_GATE_BYPASS:-}" ]; then
+    fail "GATE BYPASSED for ${pkg}"
+    fail "  reason: ${FINTRA_GATE_BYPASS}"
+    fail "  This commit is NOT backed by a passing suite."
+    continue
+  fi
+
+  # Run the real-database tests when PostgreSQL is reachable. A gate that
+  # silently skips them will admit a commit that fails under Postgres --
+  # which is exactly how the execution-intent model drift reached HEAD.
+  pgdsn="${FINTRA_PAYROLL_PG_ADMIN_DSN:-}"
+  if [ -z "$pgdsn" ] && command -v pg_isready >/dev/null 2>&1 \
+     && pg_isready -q >/dev/null 2>&1; then
+    pgdsn="postgresql:///postgres"
+  fi
+  if [ -n "$pgdsn" ]; then
+    echo "  (including real-PostgreSQL tests)"
+  else
+    fail "  WARNING: PostgreSQL not reachable — database-enforced controls"
+    fail "           are NOT being verified by this gate."
+  fi
+
+  # Only the broken plugin is excluded, not every plugin: disabling autoload
+  # wholesale also removes pytest-asyncio, and an async test would then report
+  # "not natively supported" instead of running.
+  out="$(cd "${REPO_ROOT}/${pkg}" && \
+         FINTRA_PAYROLL_PG_ADMIN_DSN="$pgdsn" eval "$cmd" 2>&1)"
+  status=$?
+  summary="$(echo "$out" | grep -E '^[0-9]+ (passed|failed)|passed|failed' | tail -1)"
+
+  if [ $status -ne 0 ]; then
+    fail "COMMIT REFUSED — ${pkg} suite is not green."
+    fail "  ${summary}"
+    echo "$out" | grep -E '^(FAILED|ERROR)' | head -20 >&2
+    fail ""
+    fail "Fix the tests, or bypass deliberately and visibly:"
+    fail "  FINTRA_GATE_BYPASS=\"why\" git commit ..."
+    exit 1
+  fi
+  ok "  ${pkg}: ${summary}"
+done
+exit 0

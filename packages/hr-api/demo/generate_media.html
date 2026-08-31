@@ -1,0 +1,127 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fintra — regenerate the demo recording</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; color: #16181d; }
+  canvas { border: 1px solid #d8dce2; border-radius: 8px; display: block; }
+  #log { white-space: pre-wrap; font: 12px/1.5 ui-monospace, monospace;
+         background: #f6f7f9; border: 1px solid #e3e6ea; border-radius: 6px;
+         padding: 10px; margin-top: 14px; max-height: 220px; overflow: auto; }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px;
+           border: 1px solid #16181d; background: #16181d; color: #fff; }
+</style>
+
+<h1>Regenerate the demo recording</h1>
+<p>
+  This produces the WebM parts under <code>demo/media/</code>. It is real
+  <code>MediaRecorder</code> output — a canvas, no camera, no microphone and no
+  person — which is what makes every step after <code>getUserMedia</code> the
+  same code a live capture takes.
+</p>
+<p>
+  <strong>The caption is deliberately anonymous.</strong> The previous footage
+  had a specific candidate's name and job title burned into the pixels, so
+  attaching it to any other candidate put the wrong person's name on the
+  flagship screen. Nothing here identifies a candidate, so it can be attached
+  to whichever interview the demo needs.
+</p>
+
+<canvas id="c" width="1280" height="720"></canvas>
+<p><button id="go">Record <span id="n">3</span> parts</button></p>
+<div id="log">idle</div>
+
+<script>
+const PARTS = Number(new URLSearchParams(location.search).get("parts") || 3);
+const SECONDS = Number(new URLSearchParams(location.search).get("seconds") || 24);
+const POST_TO = new URLSearchParams(location.search).get("post") || "/save";
+document.getElementById("n").textContent = String(PARTS);
+
+const c = document.getElementById("c");
+const g = c.getContext("2d");
+const logEl = document.getElementById("log");
+const log = (m) => { logEl.textContent += "\n" + m; logEl.scrollTop = 1e9; };
+
+function frame(part, tSec, totalSec) {
+  g.fillStyle = "#0f1115"; g.fillRect(0, 0, 1280, 720);
+
+  // A moving element, so the frames genuinely differ and the encoder has
+  // something to encode. A static canvas compresses to almost nothing and
+  // makes seek behaviour untestable.
+  const a = (tSec / 6) * Math.PI * 2;
+  g.strokeStyle = "#2f6f4f"; g.lineWidth = 14;
+  g.beginPath(); g.arc(640, 330, 120, a, a + Math.PI * 1.35); g.stroke();
+
+  g.fillStyle = "#8a919c"; g.font = "600 22px system-ui, sans-serif";
+  g.fillText("DEMO RECORDING — synthetic capture", 60, 70);
+  g.font = "400 18px system-ui, sans-serif";
+  g.fillText("no camera, no microphone, no person", 60, 100);
+
+  g.fillStyle = "#f4f6f8"; g.font = "700 92px ui-monospace, monospace";
+  const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
+  const ss = String(Math.floor(totalSec % 60)).padStart(2, "0");
+  g.fillText(`${mm}:${ss}`, 60, 560);
+
+  g.fillStyle = "#8a919c"; g.font = "400 20px system-ui, sans-serif";
+  g.fillText(`part ${part} · ${Math.floor(tSec)}s into this part`, 60, 610);
+  g.fillText("This is the interview timeline, not a wall clock.", 60, 640);
+}
+
+function pickMime() {
+  for (const m of ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"]) {
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return "video/webm";
+}
+
+async function recordPart(part, offsetSec) {
+  const mime = pickMime();
+
+  // captureStream(0) + requestFrame() rather than captureStream(30) +
+  // requestAnimationFrame. An automated browser pane reports document.hidden
+  // even when the tab is fronted, and a hidden document does not run rAF at
+  // all -- the recorder starts, no frames are ever pushed, and it hangs
+  // forever with no error. Pushing frames explicitly does not care.
+  const stream = c.captureStream(0);
+  const track = stream.getVideoTracks()[0];
+  const rec = new MediaRecorder(stream, { mimeType: mime });
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+
+  const done = new Promise((res) => { rec.onstop = res; });
+  // WALL CLOCK, not a frame count. A hidden document clamps setTimeout to about
+  // one second, so "240 frames at 100ms" produced a 240-SECOND part rather than
+  // a 24-second one -- ten times the intended length and ten times the bytes.
+  // The recorder timestamps real elapsed time, so real elapsed time is what has
+  // to be bounded. Frame rate then degrades gracefully under throttling instead
+  // of stretching the recording.
+  const t0 = performance.now();
+  rec.start(1000);
+
+  while (true) {
+    const t = (performance.now() - t0) / 1000;
+    if (t >= SECONDS) break;
+    frame(part, t, offsetSec + t);
+    if (track.requestFrame) track.requestFrame();
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  rec.stop();
+  await done;
+  stream.getTracks().forEach((t) => t.stop());
+  return new Blob(chunks, { type: mime });
+}
+
+document.getElementById("go").onclick = async () => {
+  logEl.textContent = "recording…";
+  for (let i = 1; i <= PARTS; i++) {
+    const blob = await recordPart(i, (i - 1) * SECONDS);
+    log(`part ${i}: ${blob.size} bytes, ${blob.type}`);
+    const res = await fetch(`${POST_TO}?part=${i}`, {
+      method: "POST", body: blob,
+      headers: { "Content-Type": "application/octet-stream" },
+    });
+    log(`  saved -> ${res.status} ${await res.text()}`);
+  }
+  log("DONE");
+};
+</script>

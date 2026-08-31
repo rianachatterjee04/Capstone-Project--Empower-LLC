@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fintra-entitlements"
+version = "0.1.0"
+description = "Fintra control-plane entitlements: module/seat/AI gating shared across all module backends."
+requires-python = ">=3.9"
+dependencies = [
+    "supabase>=2.9.0",
+    "fastapi>=0.109.0",
+    "python-dotenv>=1.0.0",
+]
+
+# fintra_decision and fintra_safety are co-shipped so the canonical Decision seam
+# and the shared AI safety layer reach every backend venv that already installs this
+# package. Both are import-pure (zero runtime deps of their own) even though this
+# distribution declares supabase/fastapi for the entitlements half — importing
+# fintra_decision / fintra_safety pulls nothing from those.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fintra_entitlements*", "fintra_decision*", "fintra_safety*"]

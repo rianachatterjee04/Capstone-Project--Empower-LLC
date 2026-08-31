@@ -1,0 +1,33 @@
+# Deployment manifest for the HR API.
+#
+# ENV=production below is load-bearing, and two tests in
+# packages/hr-api/tests/test_dev_token_bypass_regression.py enforce it. The
+# dev-auth bypass (`Bearer dev:<org>:<role>:...`) is disabled whenever the app
+# considers itself production, and the app decides that from ENV. This file
+# once set no ENV at all for the HR service, so the deployed API fell back to
+# a code default and the bypass was live in production. The tests exist so
+# that cannot recur silently: every service here must name ENV explicitly.
+#
+# Trimmed to the HR service for this build. The internal env group and the AI
+# gateway hostname that the full platform's manifest referenced are not here,
+# because neither is part of this repository.
+services:
+  - type: web
+    name: fintra-hr-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r packages/hr-api/requirements.txt && pip install -e packages/shared-py
+    startCommand: cd packages/hr-api && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: FINTRA_ENFORCE
+        value: '0'

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Record a gate bypass in the commit itself, so it is visible in history and
+# not only in the terminal of whoever ran it.
+set -uo pipefail
+[ -z "${FINTRA_GATE_BYPASS:-}" ] && exit 0
+printf '\nGate-Bypassed: %s\n' "${FINTRA_GATE_BYPASS}" >> "$1"
