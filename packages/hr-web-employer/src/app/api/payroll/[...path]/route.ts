@@ -135,9 +135,9 @@ async function proxy(req: NextRequest, params: { path: string[] }) {
   }
 }
 
-export async function GET(req: NextRequest, ctx: { params: { path: string[] } }) {
-  return proxy(req, ctx.params);
+export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return proxy(req, await ctx.params);
 }
-export async function POST(req: NextRequest, ctx: { params: { path: string[] } }) {
-  return proxy(req, ctx.params);
+export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
+  return proxy(req, await ctx.params);
 }
