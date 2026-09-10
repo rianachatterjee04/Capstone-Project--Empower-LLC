@@ -114,12 +114,28 @@ export function AdminHome() {
   }, [checklistsQ.data]);
 
   // Active review cycle + completion tracker.
-  const activeCycle = useMemo(() => (cyclesQ.data?.cycles ?? []).find((c) => c.status === "open") ?? (cyclesQ.data?.cycles ?? [])[0] ?? null, [cyclesQ.data]);
+  // Prefer an actually-open cycle; else the cycle name from the most recent
+  // review (matches /app/performance). Falling back to cycles[0] alone is wrong
+  // when performance_cycles rows are closed bootstrap names that don't match
+  // review.cycle strings (e.g. "Annual Review" vs seeded "Q4 2026").
+  const activeCycle = useMemo(() => {
+    const cycles = cyclesQ.data?.cycles ?? [];
+    const reviews = reviewsQ.data?.reviews ?? [];
+    const open = cycles.find((c) => c.status === "open");
+    if (open) return open;
+    const fromReviews = reviews.length ? reviews[0].cycle : null;
+    if (fromReviews) {
+      return cycles.find((c) => c.name === fromReviews) ?? { name: fromReviews, status: "open" };
+    }
+    return cycles[0] ?? null;
+  }, [cyclesQ.data, reviewsQ.data]);
   const cycleReviews = useMemo(() => {
     const rs = reviewsQ.data?.reviews ?? [];
     const scoped = activeCycle ? rs.filter((r) => r.cycle === activeCycle.name) : rs;
     const total = scoped.length;
-    const finalized = scoped.filter((r) => r.status === "finalized").length;
+    const finalized = scoped.filter((r) =>
+      r.status === "finalized" || r.status === "completed" || r.status === "calibrated"
+    ).length;
     return { total, finalized, pct: pct(finalized, total) };
   }, [reviewsQ.data, activeCycle]);
 

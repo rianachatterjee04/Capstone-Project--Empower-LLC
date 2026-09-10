@@ -50,6 +50,60 @@ async def seed():
                    "category": case[1], "severity": case[2], "details": case[3],
                    "status": case[4], "escalation_level": case[5]})
 
+        print("📝 Seeding performance reviews...")
+        reviews = [
+            ("dddd0001-0000-0000-0000-000000000001", EMP1, "Q4 2026", "finalized", 5),
+            ("dddd0001-0000-0000-0000-000000000002", "aaaa0001-0000-0000-0000-000000000002", "Q4 2026", "completed", 4),
+            ("dddd0001-0000-0000-0000-000000000003", "aaaa0001-0000-0000-0000-000000000003", "Q4 2026", "manager_review", 3),
+            ("dddd0001-0000-0000-0000-000000000004", "aaaa0001-0000-0000-0000-000000000004", "Q4 2026", "draft", None),
+            ("dddd0001-0000-0000-0000-000000000005", "aaaa0001-0000-0000-0000-000000000005", "Q4 2026", "finalized", 4),
+            ("dddd0001-0000-0000-0000-000000000006", "aaaa0001-0000-0000-0000-000000000006", "Q4 2026", "draft", 2),
+        ]
+        for rev in reviews:
+            await conn.execute(text("""
+                INSERT INTO performance_reviews (id, org_id, employee_id, cycle, status, rating, self_review)
+                VALUES (:id, :org_id, :employee_id, :cycle, :status, :rating, CAST(:self_review AS jsonb))
+                ON CONFLICT DO NOTHING
+            """), {"id": rev[0], "org_id": ORG_ID, "employee_id": rev[1], "cycle": rev[2],
+                   "status": rev[3], "rating": rev[4], "self_review": "{}"})
+
+        print("📦 Seeding onboarding packets...")
+        packets = [
+            ("ffff0001-0000-0000-0000-000000000001", "aaaa0001-0000-0000-0000-000000000008", "pending",
+             '{"i9": true, "w4": true, "direct_deposit": true, "handbook_ack": true}',
+             "{}"),
+            ("ffff0001-0000-0000-0000-000000000002", "aaaa0001-0000-0000-0000-000000000009", "in_progress",
+             '{"i9": true, "w4": true, "direct_deposit": true, "handbook_ack": true}',
+             '{"i9": true, "w4": true}'),
+            ("ffff0001-0000-0000-0000-000000000003", "aaaa0001-0000-0000-0000-000000000007", "in_progress",
+             '{"i9": true, "w4": true, "direct_deposit": true}',
+             '{"i9": true}'),
+        ]
+        for pkt in packets:
+            await conn.execute(text("""
+                INSERT INTO onboarding_packets (id, org_id, employee_id, status, requested_items, submitted_items)
+                VALUES (:id, :org_id, :employee_id, :status, CAST(:requested AS jsonb), CAST(:submitted AS jsonb))
+                ON CONFLICT DO NOTHING
+            """), {"id": pkt[0], "org_id": ORG_ID, "employee_id": pkt[1], "status": pkt[2],
+                   "requested": pkt[3], "submitted": pkt[4]})
+
+        print("📌 Seeding checklists...")
+        checklists = [
+            ("abab0001-0000-0000-0000-000000000001", "aaaa0001-0000-0000-0000-000000000006", "offboarding",
+             "Tom Williams Offboarding", "in_progress"),
+            ("abab0001-0000-0000-0000-000000000002", "aaaa0001-0000-0000-0000-000000000008", "onboarding",
+             "Carlos Rivera Day-1 Onboarding", "in_progress"),
+            ("abab0001-0000-0000-0000-000000000003", "aaaa0001-0000-0000-0000-000000000010", "offboarding",
+             "Michael Brown Equipment Return", "completed"),
+        ]
+        for cl in checklists:
+            await conn.execute(text("""
+                INSERT INTO checklists (id, org_id, employee_id, kind, name, status)
+                VALUES (:id, :org_id, :employee_id, :kind, :name, :status)
+                ON CONFLICT DO NOTHING
+            """), {"id": cl[0], "org_id": ORG_ID, "employee_id": cl[1], "kind": cl[2],
+                   "name": cl[3], "status": cl[4]})
+
         print("🏥 Seeding benefits plans...")
         plans = [
             ("bbbb0001-0000-0000-0000-000000000001", "Blue Shield PPO", "medical", "Blue Shield", 250.00, 600.00),
