@@ -32,14 +32,20 @@ def _allowed(actor: Actor) -> bool:
     return actor.role in ("owner", "admin", "hr", "recruiter", "manager")
 
 
-@router.get("/{interview_id}/live-context")
-async def live_context_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
-    """Single roll-up the live UI right-rail consumes."""
+def _require_interview(actor: Actor, interview_id: str):
+    """Auth + tenant check: interview must belong to the caller's org."""
     if not _allowed(actor):
         raise HTTPException(status_code=403, detail="Not allowed")
     iv = get_interview(actor.org_id, interview_id)
     if not iv:
         raise HTTPException(status_code=404, detail="Interview not found")
+    return iv
+
+
+@router.get("/{interview_id}/live-context")
+async def live_context_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
+    """Single roll-up the live UI right-rail consumes."""
+    iv = _require_interview(actor, interview_id)
     # Pull competencies from the interview plan if generated, else infer
     competencies = []
     plan = iv.interview_plan
@@ -60,11 +66,7 @@ async def assist_endpoint(interview_id: str, payload: dict, actor: Actor = Depen
 
     payload: {action: "...", ...}
     """
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
-    iv = get_interview(actor.org_id, interview_id)
-    if not iv:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    _require_interview(actor, interview_id)
     action = (payload.get("action") or "").lower()
     competency = payload.get("competency") or "communication"
     latest_answer = payload.get("latest_answer") or ""
@@ -105,8 +107,7 @@ async def assist_endpoint(interview_id: str, payload: dict, actor: Actor = Depen
 
 @router.post("/{interview_id}/follow-up-questions")
 async def follow_up_endpoint(interview_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     return {"items": suggest_follow_up_questions(
         latest_answer=payload.get("latest_answer") or "",
         competency=payload.get("competency") or "communication",
@@ -117,15 +118,13 @@ async def follow_up_endpoint(interview_id: str, payload: dict, actor: Actor = De
 
 @router.post("/{interview_id}/summarize-answer")
 async def summarize_answer_endpoint(interview_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     return {"summary": summarise_live_answer(payload.get("text") or "")}
 
 
 @router.post("/{interview_id}/insight")
 async def record_insight_endpoint(interview_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     title = (payload.get("title") or "").strip()
     if not title:
         raise HTTPException(status_code=400, detail="title required")
@@ -146,8 +145,7 @@ async def record_insight_endpoint(interview_id: str, payload: dict, actor: Actor
 
 @router.get("/{interview_id}/insights")
 async def list_insights_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     from app.services.interview_copilot_service import list_insights
     return {"items": [i.to_dict() for i in list_insights(interview_id)]}
 
@@ -155,6 +153,5 @@ async def list_insights_endpoint(interview_id: str, actor: Actor = Depends(requi
 @router.get("/{interview_id}/transcript-rendered")
 async def rendered_transcript_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
     """Convenience: full transcript as a single string (for the AI panel)."""
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     return {"transcript": full_transcript(interview_id)}

@@ -47,6 +47,16 @@ def _allowed(actor: Actor) -> bool:
     return actor.role in ("owner", "admin", "hr", "recruiter", "manager")
 
 
+def _require_interview(actor: Actor, interview_id: str):
+    """Auth + tenant check: interview must belong to the caller's org."""
+    if not _allowed(actor):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    iv = get_interview(actor.org_id, interview_id)
+    if not iv:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    return iv
+
+
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
@@ -82,12 +92,7 @@ async def create_endpoint(payload: dict, actor: Actor = Depends(require_org)):
 
 @router.get("/{interview_id}")
 async def get_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
-    iv = get_interview(actor.org_id, interview_id)
-    if not iv:
-        raise HTTPException(status_code=404, detail="Interview not found")
-    return iv.to_dict()
+    return _require_interview(actor, interview_id).to_dict()
 
 
 @router.patch("/{interview_id}")
@@ -105,11 +110,7 @@ async def patch_endpoint(interview_id: str, payload: dict, actor: Actor = Depend
 # ---------------------------------------------------------------------------
 @router.post("/{interview_id}/generate-plan")
 async def generate_plan_endpoint(interview_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
-    iv = get_interview(actor.org_id, interview_id)
-    if not iv:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    iv = _require_interview(actor, interview_id)
     plan = generate_interview_plan(
         interview_type=iv.interview_type,
         job_title=iv.job_title,
@@ -124,11 +125,7 @@ async def generate_plan_endpoint(interview_id: str, payload: dict, actor: Actor 
 
 @router.post("/{interview_id}/generate-questions")
 async def generate_questions_endpoint(interview_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
-    iv = get_interview(actor.org_id, interview_id)
-    if not iv:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    iv = _require_interview(actor, interview_id)
     qs = generate_candidate_specific_questions(
         interview_id=interview_id,
         interview_type=iv.interview_type,
@@ -142,15 +139,13 @@ async def generate_questions_endpoint(interview_id: str, payload: dict, actor: A
 
 @router.get("/{interview_id}/questions")
 async def list_questions_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     return {"items": [q.to_dict() for q in list_questions(interview_id)]}
 
 
 @router.post("/{interview_id}/questions/{question_id}/asked")
 async def mark_asked_endpoint(interview_id: str, question_id: str, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     q = mark_question_asked(interview_id, question_id)
     if not q:
         raise HTTPException(status_code=404, detail="Question not found")
@@ -162,15 +157,13 @@ async def mark_asked_endpoint(interview_id: str, question_id: str, actor: Actor 
 # ---------------------------------------------------------------------------
 @router.get("/{interview_id}/consent")
 async def get_consent_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     return get_consent(interview_id).to_dict()
 
 
 @router.post("/{interview_id}/consent")
 async def record_consent_endpoint(interview_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     try:
         rec = record_consent(
             interview_id,
@@ -186,8 +179,7 @@ async def record_consent_endpoint(interview_id: str, payload: dict, actor: Actor
 
 @router.post("/{interview_id}/transcript")
 async def push_transcript_endpoint(interview_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     from app.services.interview_transcription_service import append_line
     line = append_line(
         interview_id,
@@ -203,8 +195,7 @@ async def push_transcript_endpoint(interview_id: str, payload: dict, actor: Acto
 
 @router.get("/{interview_id}/transcript")
 async def list_transcript_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     lines = list_lines(interview_id)
     return {
         "items": [l.to_dict() for l in lines],
@@ -217,8 +208,7 @@ async def list_transcript_endpoint(interview_id: str, actor: Actor = Depends(req
 # ---------------------------------------------------------------------------
 @router.post("/{interview_id}/scorecard")
 async def upsert_scorecard_endpoint(interview_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     competencies = payload.get("competencies") or []
     if not competencies:
         raise HTTPException(status_code=400, detail="competencies required")
@@ -233,15 +223,13 @@ async def upsert_scorecard_endpoint(interview_id: str, payload: dict, actor: Act
 
 @router.get("/{interview_id}/scorecard")
 async def list_scorecards_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     return {"items": [s.to_dict() for s in list_scorecards(interview_id)]}
 
 
 @router.patch("/{interview_id}/scorecard/{scorecard_id}")
 async def patch_competency_endpoint(interview_id: str, scorecard_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     competency = (payload.get("competency") or "").strip()
     if not competency:
         raise HTTPException(status_code=400, detail="competency required")
@@ -260,9 +248,7 @@ async def patch_competency_endpoint(interview_id: str, scorecard_id: str, payloa
 
 @router.post("/{interview_id}/scorecard/{scorecard_id}/draft")
 async def draft_scorecard_endpoint(interview_id: str, scorecard_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
-    iv = get_interview(actor.org_id, interview_id)
+    iv = _require_interview(actor, interview_id)
     candidate = iv.candidate_name if iv else "the candidate"
     return {"drafted": draft_from_transcript(
         interview_id=interview_id,
@@ -273,8 +259,7 @@ async def draft_scorecard_endpoint(interview_id: str, scorecard_id: str, payload
 
 @router.post("/{interview_id}/scorecard/{scorecard_id}/submit")
 async def submit_scorecard_endpoint(interview_id: str, scorecard_id: str, payload: dict, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
+    _require_interview(actor, interview_id)
     overall = payload.get("overall_rating")
     rec = payload.get("overall_recommendation")
     conf = payload.get("interviewer_confidence")
@@ -344,11 +329,7 @@ async def adjust_score_review_endpoint(interview_id: str, review_id: str, payloa
 # ---------------------------------------------------------------------------
 @router.post("/{interview_id}/post-summary")
 async def post_summary_endpoint(interview_id: str, actor: Actor = Depends(require_org)):
-    if not _allowed(actor):
-        raise HTTPException(status_code=403, detail="Not allowed")
-    iv = get_interview(actor.org_id, interview_id)
-    if not iv:
-        raise HTTPException(status_code=404, detail="Interview not found")
+    iv = _require_interview(actor, interview_id)
     return generate_post_interview_summary(
         interview_id=interview_id,
         candidate_name=iv.candidate_name,

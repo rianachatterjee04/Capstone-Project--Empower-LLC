@@ -1,9 +1,13 @@
 """Predictive attrition / flight-risk router."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timezone
 
-from app.api.deps import Actor, require_org
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import Actor, db_session, require_org
 from app.services.attrition_service import AttritionFeatures, predict, predict_batch
 
 
@@ -34,6 +38,23 @@ def _to_features(row: dict) -> AttritionFeatures:
     )
 
 
+def _tenure_years(start_date) -> float:
+    if not start_date:
+        return 1.0
+    try:
+        if hasattr(start_date, "year"):
+            d = start_date
+            if hasattr(d, "tzinfo") and d.tzinfo is not None:
+                now = datetime.now(timezone.utc).date()
+            else:
+                now = datetime.utcnow().date()
+            return max(0.1, (now - d).days / 365.25)
+        d = datetime.fromisoformat(str(start_date)).date()
+        return max(0.1, (datetime.utcnow().date() - d).days / 365.25)
+    except Exception:
+        return 1.0
+
+
 @router.post("/predict")
 async def predict_one(payload: dict, actor: Actor = Depends(require_org)):
     if not _allowed(actor):
@@ -53,22 +74,42 @@ async def predict_many(payload: dict, actor: Actor = Depends(require_org)):
 
 
 @router.get("/demo")
-async def demo(actor: Actor = Depends(require_org)):
-    """Synthetic demo data so the UI shows something useful out of the box."""
+async def demo(actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
+    """Flight-risk scores for the caller's active employees (org-scoped).
+
+    Path kept as /demo for employer-portal compatibility; payload is real org
+    data, not the old invented Avery Chen cohort.
+    """
     if not _allowed(actor):
         raise HTTPException(status_code=403, detail="Not allowed")
-    sample = [
-        AttritionFeatures("e1", "Avery Chen", department="Engineering", tenure_years=2.4, months_since_last_raise=22, months_since_last_promotion=30, performance_rating=4.5, engagement_score=0.42, compa_ratio=0.82, overtime_hours_last_30d=38),
-        AttritionFeatures("e2", "Jordan Patel", department="Sales", tenure_years=1.8, months_since_last_raise=14, months_since_last_promotion=20, performance_rating=3.2, engagement_score=0.61, compa_ratio=0.97, pto_balance_days=22),
-        AttritionFeatures("e3", "Sam Rivera", department="Engineering", tenure_years=3.6, months_since_last_raise=10, months_since_last_promotion=12, performance_rating=4.0, compa_ratio=1.05, engagement_score=0.78),
-        AttritionFeatures("e4", "Morgan Lee", department="HR", tenure_years=0.6, months_since_last_raise=6, months_since_last_promotion=0, performance_rating=3.6, compa_ratio=0.99, manager_change_in_last_180d=True),
-        AttritionFeatures("e5", "Riley Singh", department="Design", tenure_years=2.0, months_since_last_raise=18, months_since_last_promotion=24, performance_rating=4.8, compa_ratio=0.88, role_change_in_last_180d=True, pto_balance_days=19),
+
+    rows = (await db.execute(text("""
+        select e.id, e.legal_name, e.department, e.start_date,
+               (select pr.rating
+                  from public.performance_reviews pr
+                 where pr.org_id = e.org_id and pr.employee_id = e.id
+                   and pr.rating is not null
+                 order by pr.created_at desc
+                 limit 1) as rating
+          from public.employees e
+         where e.org_id = cast(:org_id as uuid)
+           and e.status = 'active'
+         order by e.legal_name
+    """), {"org_id": actor.org_id})).mappings().all()
+
+    features = [
+        AttritionFeatures(
+            employee_id=str(r["id"]),
+            name=r["legal_name"],
+            department=r["department"],
+            tenure_years=_tenure_years(r["start_date"]),
+            performance_rating=float(r["rating"]) if r["rating"] is not None else 3.5,
+        )
+        for r in rows
     ]
-    # Every person below is invented. An attrition score attached to a NAME
-    # reads as a claim about that person, so the payload has to say whose
-    # people these are before a screen renders "Avery Chen: high risk".
+    preds = predict_batch(features) if features else []
     return {
-        "items": [{**p.to_dict(), "is_sample": True} for p in predict_batch(sample)],
-        "all_sample": True,
-        "provenance": "these are illustrative sample people, not employees in your organisation",
+        "items": [p.to_dict() for p in preds],
+        "all_sample": False,
+        "provenance": "scored from your organisation's active employees",
     }

@@ -12,8 +12,8 @@ router = APIRouter(prefix="/manager-brief", tags=["manager-brief"])
 
 
 @router.get("/managers")
-async def managers(actor: Actor = Depends(require_org)):
-    return {"items": list_managers()}
+async def managers(actor: Actor = Depends(require_org), db: AsyncSession = Depends(db_session)):
+    return {"items": await list_managers(db, actor.org_id)}
 
 
 @router.get("/today")
@@ -24,5 +24,5 @@ async def today(
 ):
     if actor.role not in ("owner", "admin", "hr", "manager"):
         raise HTTPException(status_code=403, detail="Not allowed")
-    brief = await build_brief(db, actor.org_id, manager or list_managers()[0]["name"])
+    brief = await build_brief(db, actor.org_id, manager)
     return brief.to_dict()

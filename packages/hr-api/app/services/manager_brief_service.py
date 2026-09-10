@@ -32,14 +32,6 @@ class BriefSignal:
     cta_label: str
     cta_href: str
     subject: Optional[str] = None
-    # WHOSE TEAM THIS IS ABOUT.
-    #
-    # The manager brief's action feed opened with "Avery Chen · high attrition
-    # risk · urgent · Compa-ratio ...", on a page titled "Who needs my
-    # attention today" whose rows are described as "every row is a decision you
-    # can make from here". Avery Chen is in _synthetic_features() below. This
-    # is the same invented person as the risk engine and the exec brief, on the
-    # screen that asks a manager to act today.
     is_sample: bool = False
 
     def to_dict(self) -> dict:
@@ -70,26 +62,6 @@ class ManagerBrief:
         }
 
 
-# Demo manager roster — mirrors the synthetic data the rest of the system uses.
-_MANAGERS = {
-    "Sam Rivera": {
-        "department": "Engineering",
-        "team": ["Avery Chen", "Jordan Patel"],
-        "open_reqs": 2,
-    },
-    "Casey Quinn": {
-        "department": "HR",
-        "team": ["Morgan Lee"],
-        "open_reqs": 0,
-    },
-    "Riley Manager": {
-        "department": "Design",
-        "team": ["Riley Singh"],
-        "open_reqs": 1,
-    },
-}
-
-
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -102,25 +74,85 @@ async def _scalar(db: AsyncSession, sql: str, params: dict) -> int:
         return 0
 
 
-def _synthetic_features() -> list[AttritionFeatures]:
+def _tenure_years(start_date) -> float:
+    if not start_date:
+        return 1.0
+    try:
+        if hasattr(start_date, "year"):
+            return max(0.1, (datetime.utcnow().date() - start_date).days / 365.25)
+        d = datetime.fromisoformat(str(start_date)).date()
+        return max(0.1, (datetime.utcnow().date() - d).days / 365.25)
+    except Exception:
+        return 1.0
+
+
+async def list_managers(db: AsyncSession, org_id: str) -> list[dict]:
+    """Employees who have at least one active direct report."""
+    rows = (await db.execute(text("""
+        select m.id, m.legal_name as name, m.department,
+               count(r.id)::int as team_size
+          from public.employees m
+          join public.employees r
+            on r.manager_employee_id = m.id
+           and r.org_id = m.org_id
+           and r.status = 'active'
+         where m.org_id = cast(:org_id as uuid)
+           and m.status = 'active'
+         group by m.id, m.legal_name, m.department
+         order by m.legal_name
+    """), {"org_id": org_id})).mappings().all()
     return [
-        AttritionFeatures("e1", "Avery Chen",  department="Engineering", tenure_years=2.4, months_since_last_raise=22, months_since_last_promotion=30, performance_rating=4.5, engagement_score=0.42, compa_ratio=0.82, overtime_hours_last_30d=38),
-        AttritionFeatures("e2", "Jordan Patel", department="Sales",      tenure_years=1.8, months_since_last_raise=14, months_since_last_promotion=20, performance_rating=3.2, engagement_score=0.61, compa_ratio=0.97, pto_balance_days=22),
-        AttritionFeatures("e5", "Riley Singh",  department="Design",     tenure_years=2.0, months_since_last_raise=18, months_since_last_promotion=24, performance_rating=4.8, compa_ratio=0.88, role_change_in_last_180d=True, pto_balance_days=19),
+        {"name": r["name"], "department": r["department"] or "General", "id": str(r["id"]), "team_size": r["team_size"]}
+        for r in rows
     ]
 
 
-def list_managers() -> list[dict]:
-    return [{"name": name, "department": meta["department"]} for name, meta in _MANAGERS.items()]
+async def _load_manager_team(db: AsyncSession, org_id: str, manager_name: str | None) -> tuple[str, str, list[dict]]:
+    """Resolve manager + direct reports from employees.manager_employee_id."""
+    managers = await list_managers(db, org_id)
+    if not managers:
+        return manager_name or "Manager", "General", []
+
+    chosen = None
+    if manager_name:
+        for m in managers:
+            if m["name"].lower() == manager_name.lower():
+                chosen = m
+                break
+    if chosen is None:
+        chosen = managers[0]
+
+    reports = (await db.execute(text("""
+        select e.id, e.legal_name, e.department, e.start_date,
+               (select pr.rating
+                  from public.performance_reviews pr
+                 where pr.org_id = e.org_id and pr.employee_id = e.id
+                   and pr.rating is not null
+                 order by pr.created_at desc
+                 limit 1) as rating
+          from public.employees e
+         where e.org_id = cast(:org_id as uuid)
+           and e.manager_employee_id = cast(:mgr as uuid)
+           and e.status = 'active'
+         order by e.legal_name
+    """), {"org_id": org_id, "mgr": chosen["id"]})).mappings().all()
+
+    team = [
+        {
+            "id": str(r["id"]),
+            "name": r["legal_name"],
+            "department": r["department"] or chosen.get("department") or "General",
+            "tenure_years": _tenure_years(r["start_date"]),
+            "performance_rating": float(r["rating"]) if r["rating"] is not None else 3.5,
+        }
+        for r in reports
+    ]
+    return chosen["name"], chosen.get("department") or "General", team
 
 
-async def build_brief(db: AsyncSession, org_id: str, manager_name: str) -> ManagerBrief:
-    meta = _MANAGERS.get(manager_name)
-    if not meta:
-        meta = list(_MANAGERS.values())[0]
-        manager_name = list(_MANAGERS.keys())[0]
-    team = set(meta["team"])
-    department = meta["department"]
+async def build_brief(db: AsyncSession, org_id: str, manager_name: str | None = None) -> ManagerBrief:
+    manager_name, department, team_rows = await _load_manager_team(db, org_id, manager_name)
+    team_names = {t["name"] for t in team_rows}
 
     pto_pending = await _scalar(
         db,
@@ -138,15 +170,26 @@ async def build_brief(db: AsyncSession, org_id: str, manager_name: str) -> Manag
         {"org_id": org_id},
     )
 
-    preds = predict_batch(_synthetic_features())
-    team_preds = [p for p in preds if p.name in team]
-    high = [p for p in team_preds if p.band == "high"]
-    medium = [p for p in team_preds if p.band == "medium"]
+    features = [
+        AttritionFeatures(
+            employee_id=t["id"],
+            name=t["name"],
+            department=t["department"],
+            tenure_years=t["tenure_years"],
+            performance_rating=t["performance_rating"],
+        )
+        for t in team_rows
+    ]
+    preds = predict_batch(features) if features else []
+    high = [p for p in preds if p.band == "high"]
+    medium = [p for p in preds if p.band == "medium"]
 
-    # Tasks owned by the manager (or marked manager-action)
     manager_tasks = list_tasks(org_id, owner_role="manager")
     manager_tasks_open = [t for t in manager_tasks if t["status"] != "done"]
-    team_tasks = [t for t in manager_tasks_open if (t.get("related_employee_name") in team) or (t.get("department") == department)]
+    team_tasks = [
+        t for t in manager_tasks_open
+        if (t.get("related_employee_name") in team_names) or (t.get("department") == department)
+    ]
 
     overdue = 0
     for t in team_tasks:
@@ -184,21 +227,20 @@ async def build_brief(db: AsyncSession, org_id: str, manager_name: str) -> Manag
     for p in high:
         signals.append(BriefSignal(
             kind="attrition",
-            # Not urgent: it is not about anyone on this manager's team.
-            severity="this_week",
-            title=f"{p.name} · high attrition risk (sample)",
+            severity="urgent",
+            title=f"{p.name} · high attrition risk",
             detail="; ".join(p.drivers[:2]),
             cta_label="Open twin",
             cta_href=f"/app/digital-twin?id={p.employee_id}",
             subject=p.name,
-            is_sample=True,
+            is_sample=False,
         ))
     for p in medium:
         signals.append(BriefSignal(
             kind="attrition",
             severity="this_week",
-            is_sample=True,
-            title=f"{p.name} · medium attrition risk (sample)",
+            is_sample=False,
+            title=f"{p.name} · medium attrition risk",
             detail="; ".join(p.drivers[:2]),
             cta_label="Open twin",
             cta_href=f"/app/digital-twin?id={p.employee_id}",
@@ -215,7 +257,6 @@ async def build_brief(db: AsyncSession, org_id: str, manager_name: str) -> Manag
             cta_href="/app/talent",
         ))
 
-    # Review cycle reminder — pulled from tasks tagged 'review' if any
     review_tasks = [t for t in manager_tasks_open if "review" in (t.get("tags") or [])]
     if review_tasks:
         signals.append(BriefSignal(
@@ -227,9 +268,8 @@ async def build_brief(db: AsyncSession, org_id: str, manager_name: str) -> Manag
             cta_href="/app/performance",
         ))
 
-    # Suggested actions — calmer second list. Always include 1:1 nudges and recognition.
     suggested: list[BriefSignal] = []
-    for member in team:
+    for member in sorted(team_names):
         suggested.append(BriefSignal(
             kind="recognition",
             severity="low",
@@ -262,28 +302,21 @@ async def build_brief(db: AsyncSession, org_id: str, manager_name: str) -> Manag
         "approvals_pending": pto_pending,
         "tasks_open": len(team_tasks),
         "tasks_overdue": overdue,
-        "team_size": len(team),
+        "team_size": len(team_rows),
         "team_high_risk": len(high),
         "team_medium_risk": len(medium),
         "hiring_in_motion": candidates_offer + candidates_interview,
     }
 
-    # Count only signals about this manager's own people. The attrition rows
-    # come from a sample cohort, and "2 signals on your team this week" was
-    # counting one of them.
-    real = [s for s in signals if not s.is_sample]
-    if any(s.severity == "urgent" for s in real):
+    if any(s.severity == "urgent" for s in signals):
         headline = f"Action required for {department} team."
-    elif real:
-        headline = f"{len(real)} signal{'s' if len(real) != 1 else ''} on your team this week."
     elif signals:
-        headline = (f"Nothing on your {department} team this week. The attrition "
-                    "rows below are a sample.")
+        headline = f"{len(signals)} signal{'s' if len(signals) != 1 else ''} on your team this week."
     else:
         headline = f"{department} team is steady. Good time to invest in 1:1s."
 
     summary = (
-        f"{len(team)} direct report{'s' if len(team) != 1 else ''} · "
+        f"{len(team_rows)} direct report{'s' if len(team_rows) != 1 else ''} · "
         f"{len(team_tasks)} open tasks · {overdue} overdue · "
         f"{len(high)} high-risk · {pto_pending} PTO awaiting your call."
     )
