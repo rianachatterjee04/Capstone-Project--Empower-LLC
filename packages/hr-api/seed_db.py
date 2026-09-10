@@ -43,8 +43,8 @@ async def seed():
         ]
         for case in cases:
             await conn.execute(text("""
-                INSERT INTO cases (id, org_id, reporter_employee_id, is_anonymous, category, severity, details, status, escalation_level)
-                VALUES (:id, :org_id, :reporter_id, false, :category, :severity, :details, :status, :escalation_level)
+                INSERT INTO cases (id, org_id, reporter_employee_id, is_anonymous, legal_freeze, category, severity, details, status, escalation_level)
+                VALUES (:id, :org_id, :reporter_id, false, false, :category, :severity, :details, :status, :escalation_level)
                 ON CONFLICT DO NOTHING
             """), {"id": case[0], "org_id": ORG_ID, "reporter_id": EMP1,
                    "category": case[1], "severity": case[2], "details": case[3],
