@@ -7,6 +7,7 @@ import { PageHeader, Surface, SectionTitle, Pill, Action, EmptyState, Divider } 
 import { WorkflowTimeline, stepFromSubtasks, type WorkflowStep, type WorkflowSubtask, type StepStatus } from "@/components/WorkflowTimeline";
 import { Input } from "@/components/Input";
 import { Textarea } from "@/components/Textarea";
+import { useToast } from "@/components/Toast";
 
 type Packet = {
   id: string;
@@ -90,6 +91,7 @@ function packetJourney(packet: Packet, activeKey: string): WorkflowStep[] {
 
 export default function OnboardingPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const { data, isLoading, error } = useQuery({
     queryKey: ["packets"],
     queryFn: () => apiFetch<Packet[]>("/onboarding/packets"),
@@ -109,24 +111,21 @@ export default function OnboardingPage() {
   const step = availableSteps[stepIdx];
   const [form, setForm] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [requestNote, setRequestNote] = useState("");
   const [requestBusy, setRequestBusy] = useState(false);
-  const [requestErr, setRequestErr] = useState<string | null>(null);
 
   const isLastStep = stepIdx === availableSteps.length - 1;
 
   async function saveStep() {
     if (!packet) return;
     setSaving(true);
-    setSaveMsg(null);
     try {
       const submitted_items = { ...(packet.submitted_items ?? {}), [step.key]: { ...form, saved_at: new Date().toISOString() } };
       await apiPatch<Packet>(`/onboarding/packets/${packet.id}`, { submitted_items });
       await qc.invalidateQueries({ queryKey: ["packets"] });
-      setSaveMsg("Saved.");
+      toast.success("Saved.");
     } catch (e) {
-      setSaveMsg("Error saving: " + (e as Error).message);
+      toast.error("Couldn't save: " + (e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -136,20 +135,19 @@ export default function OnboardingPage() {
     await saveStep();
     setStepIdx((i) => Math.min(i + 1, availableSteps.length - 1));
     setForm({});
-    setSaveMsg(null);
   }
 
   async function finish() {
     if (!packet) return;
     setSaving(true);
-    setSaveMsg(null);
     try {
       const submitted_items = { ...(packet.submitted_items ?? {}), [step.key]: { ...form, saved_at: new Date().toISOString() } };
       await apiPatch<Packet>(`/onboarding/packets/${packet.id}`, { submitted_items });
       await apiPatch<Packet>(`/onboarding/packets/${packet.id}`, { status: "completed" });
       await qc.invalidateQueries({ queryKey: ["packets"] });
+      toast.success("Onboarding submitted. HR will review it next.");
     } catch (e) {
-      setSaveMsg("Error: " + (e as Error).message);
+      toast.error("Couldn't submit: " + (e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -157,13 +155,13 @@ export default function OnboardingPage() {
 
   async function sendHrRequest() {
     setRequestBusy(true);
-    setRequestErr(null);
     try {
       await apiPost<PacketRequest>("/onboarding/packet-requests", { message: requestNote.trim() || undefined });
       await qc.invalidateQueries({ queryKey: ["onboarding-packet-request-me"] });
       setRequestNote("");
+      toast.success("Request sent to HR.");
     } catch (e) {
-      setRequestErr((e as Error).message);
+      toast.error("Couldn't send request: " + (e as Error).message);
     } finally {
       setRequestBusy(false);
     }
@@ -201,7 +199,6 @@ export default function OnboardingPage() {
                   onChange={(e) => setRequestNote(e.target.value)}
                   placeholder="Optional"
                 />
-                {requestErr && <div className="text-sm text-danger-fg">{requestErr}</div>}
                 <Action onClick={sendHrRequest} variant="primary" disabled={requestBusy}>
                   {requestBusy ? "Sending…" : "Request packet from HR"}
                 </Action>
@@ -270,7 +267,7 @@ export default function OnboardingPage() {
                   return (
                     <button
                       key={s.key}
-                      onClick={() => { setStepIdx(i); setForm({}); setSaveMsg(null); }}
+                      onClick={() => { setStepIdx(i); setForm({}); }}
                       className={`text-2xs uppercase tracking-eyebrow px-2 py-1 rounded-md border transition-colors duration-150 ease-calm ${
                         i === stepIdx
                           ? "bg-accent text-accent-fg border-accent"
@@ -317,16 +314,10 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {saveMsg && (
-            <div className={`mt-3 text-sm ${saveMsg.startsWith("Error") ? "text-danger-fg" : "text-success-fg"}`}>
-              {saveMsg}
-            </div>
-          )}
-
           <Divider className="my-4" />
 
           <div className="flex items-center justify-between">
-            <Action variant="subtle" onClick={() => { setStepIdx(Math.max(0, stepIdx - 1)); setForm({}); setSaveMsg(null); }} disabled={stepIdx === 0}>
+            <Action variant="subtle" onClick={() => { setStepIdx(Math.max(0, stepIdx - 1)); setForm({}); }} disabled={stepIdx === 0}>
               Back
             </Action>
             <div className="flex gap-2">
@@ -350,13 +341,19 @@ export default function OnboardingPage() {
  * (equipment, intros, handbook…). Complements the document packet above. */
 function MyChecklistSection() {
   const qc = useQueryClient();
+  const toast = useToast();
   const q = useQuery({
     queryKey: ["my-checklists"],
     queryFn: () => apiFetch<ChecklistT[]>("/checklists/me"),
   });
   const toggle = async (t: ChecklistTaskT) => {
-    await apiPost(`/checklists/tasks/${t.id}/${t.status === "done" ? "reopen" : "complete"}`, {});
-    await qc.invalidateQueries({ queryKey: ["my-checklists"] });
+    try {
+      await apiPost(`/checklists/tasks/${t.id}/${t.status === "done" ? "reopen" : "complete"}`, {});
+      await qc.invalidateQueries({ queryKey: ["my-checklists"] });
+      toast.success(t.status === "done" ? `Reopened "${t.title}"` : `Marked "${t.title}" done`);
+    } catch (e) {
+      toast.error(`Couldn't update "${t.title}": ${(e as Error).message}`);
+    }
   };
   const lists = q.data ?? [];
   if (q.isLoading || lists.length === 0) return null;

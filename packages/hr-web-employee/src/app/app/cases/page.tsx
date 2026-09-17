@@ -5,6 +5,7 @@ import { apiFetch, apiPost } from "@/lib/api";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Textarea } from "@/components/Textarea";
+import { useToast } from "@/components/Toast";
 
 type CaseReport = {
   id: string;
@@ -18,11 +19,11 @@ type CaseReport = {
 
 export default function CasesPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [category, setCategory] = useState("harassment");
   const [severity, setSeverity] = useState("medium");
   const [details, setDetails] = useState("");
   const [anonymous, setAnonymous] = useState(true);
-  const [msg, setMsg] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["cases"],
@@ -30,14 +31,13 @@ export default function CasesPage() {
   });
 
   async function submit() {
-    setMsg(null);
     try {
       await apiPost("/cases", { category, severity, details, is_anonymous: anonymous, reporter_employee_id: null });
       setDetails("");
-      setMsg("Submitted.");
+      toast.success("Report submitted.");
       await qc.invalidateQueries({ queryKey: ["cases"] });
     } catch (e: any) {
-      setMsg(e.message);
+      toast.error(`Couldn't submit report: ${e.message}`);
     }
   }
 
@@ -61,7 +61,6 @@ export default function CasesPage() {
         </label>
         <div className="flex items-center gap-2">
           <Button onClick={submit} disabled={!details.trim()}>Submit</Button>
-          {msg ? <div className="text-sm text-black/70">{msg}</div> : null}
         </div>
       </div>
 

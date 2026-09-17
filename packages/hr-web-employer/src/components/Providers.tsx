@@ -1,6 +1,7 @@
 "use client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { ToastProvider } from "./Toast";
 
 /**
  * WHY THE RETRY POLICY IS SPELLED OUT
@@ -30,5 +31,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultOptions: { queries: { retry: shouldRetry } },
       }),
   );
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <ToastProvider>{children}</ToastProvider>
+    </QueryClientProvider>
+  );
 }

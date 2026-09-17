@@ -2,11 +2,12 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiPost } from "@/lib/api";
+import { apiFetch, apiPost, detailMessage } from "@/lib/api";
 import { PIPELINE_STAGES, toStage, type Stage as SharedStage } from "@/lib/pipelineStages";
 
 import { PageHeader, Surface, SectionTitle, Pill, Action, LinkAction, EmptyState, Divider, Avatar } from "@/components/ds";
 import { IconArrowUpRight, IconSparkle } from "@/components/icons";
+import { useToast } from "@/components/Toast";
 
 type Job = { id: string; title: string; location?: string | null; status: string; description: string; created_at: string };
 type Candidate = { id: string; full_name: string; email: string; status: string; ai_score?: number | null; ai_summary?: string | null; resume_text?: string | null; job_posting_id: string; created_at: string };
@@ -103,6 +104,7 @@ function ChipRow({ label, tone, chips }: { label: string; tone: "success" | "dan
 
 export default function TalentPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [selectedJob, setSelectedJob] = useState<string>("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [ranked, setRanked] = useState<Ranked[] | null>(null);
@@ -139,14 +141,22 @@ export default function TalentPage() {
       const res = await apiPost<{ items: Ranked[] }>(`/resume-ai/screen-job/${selectedJob}`, {});
       setRanked(res.items);
       await qc.invalidateQueries({ queryKey: ["candidates"] });
+      toast.success(`Ranked ${res.items.length} candidate${res.items.length === 1 ? "" : "s"}`);
+    } catch (e) {
+      toast.error(`AI ranking failed: ${detailMessage(e)}`);
     } finally {
       setRunning(false);
     }
   }
 
   async function moveStage(cand: Candidate, stage: Stage) {
-    await apiPost(`/recruiting/candidates/${cand.id}/stage?stage=${stage}`, {});
-    await qc.invalidateQueries({ queryKey: ["candidates"] });
+    try {
+      await apiPost(`/recruiting/candidates/${cand.id}/stage?stage=${stage}`, {});
+      await qc.invalidateQueries({ queryKey: ["candidates"] });
+      toast.success(`${cand.full_name} moved to ${stage}`);
+    } catch (e) {
+      toast.error(`Couldn't move ${cand.full_name}: ${detailMessage(e)}`);
+    }
   }
 
   return (

@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, apiPost } from "@/lib/api";
+import { apiFetch, apiPost, detailMessage } from "@/lib/api";
 
 import { PageHeader, Surface, SectionTitle, Pill, StatusPill, Action, LinkAction, EmptyState, Divider } from "@/components/ds";
 import { WorkflowTimeline, defaultOnboardingTemplate, stepFromSubtasks, type WorkflowStep, type StepStatus } from "@/components/WorkflowTimeline";
 import { IconArrowUpRight } from "@/components/icons";
+import { useToast } from "@/components/Toast";
 
 type Employee = {
   id: string;
@@ -102,10 +103,9 @@ function packetTimeline(pkt: OnboardingPacket, employee?: Employee): WorkflowSte
 
 export default function OnboardingPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const empQ = useQuery({
     queryKey: ["employees"],
@@ -127,28 +127,31 @@ export default function OnboardingPage() {
         requested_items: REQUESTED_ITEMS_DEFAULT,
       }),
     onSuccess: (data) => {
-      setSuccessMsg(`Onboarding packet created · ${data.id.slice(0, 8)}`);
-      setErrorMsg(null);
+      toast.success(`Onboarding packet created · ${data.id.slice(0, 8)}`);
       setSelectedEmployeeId("");
       qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
       qc.invalidateQueries({ queryKey: ["onboarding-packet-requests"] });
     },
-    onError: (e: Error) => { setErrorMsg(e.message); setSuccessMsg(null); },
+    onError: (e: Error) => toast.error(`Couldn't create packet: ${detailMessage(e)}`),
   });
 
   const verifyMutation = useMutation({
     mutationFn: (packetId: string) => apiPost(`/onboarding/packets/${packetId}/verify`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["onboarding-packets"] }),
-    onError: (e: Error) => setErrorMsg(e.message),
+    onSuccess: () => {
+      toast.success("Packet verified");
+      qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
+    },
+    onError: (e: Error) => toast.error(`Couldn't verify packet: ${detailMessage(e)}`),
   });
 
   const activateMutation = useMutation({
     mutationFn: (packetId: string) => apiPost(`/onboarding/packets/${packetId}/activate`, {}),
     onSuccess: () => {
+      toast.success("Employee activated");
       qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
       qc.invalidateQueries({ queryKey: ["employees"] });
     },
-    onError: (e: Error) => setErrorMsg(e.message),
+    onError: (e: Error) => toast.error(`Couldn't activate employee: ${detailMessage(e)}`),
   });
 
   const employees = empQ.data ?? [];
@@ -243,8 +246,7 @@ export default function OnboardingPage() {
             </Action>
           </div>
         )}
-        {successMsg && <div className="mt-3 text-sm text-success-fg">{successMsg}</div>}
-        {errorMsg && <div className="mt-3 text-sm text-danger-fg">{errorMsg}</div>}
+
       </Surface>
 
       <Surface>

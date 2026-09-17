@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiPost } from "@/lib/api";
+import { apiPost, detailMessage } from "@/lib/api";
+import { useToast } from "./Toast";
 
 export default function DecisionInbox() {
   const [events, setEvents] = useState<any[]>([]);
+  const toast = useToast();
 
   useEffect(() => {
     function handler(e: any) {
@@ -34,9 +36,14 @@ export default function DecisionInbox() {
                 onClick={() =>
                   // Route to the HR backend via apiPost (env base + demo token),
                   // not a bare /api path that the proxy would send elsewhere.
-                  apiPost("/decisions/respond", { id: e.id, action: a.id }).catch(
-                    () => {}
-                  )
+                  apiPost("/decisions/respond", { id: e.id, action: a.id })
+                    .then(() => {
+                      toast.success(`${a.label} recorded for "${e.title}"`);
+                      setEvents((prev) => prev.filter((ev) => ev !== e));
+                    })
+                    .catch((err) => {
+                      toast.error(`Couldn't record "${a.label}": ${detailMessage(err)}`);
+                    })
                 }
               >
                 {a.label}
