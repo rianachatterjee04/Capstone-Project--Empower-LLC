@@ -504,6 +504,79 @@ def generate_candidate_specific_questions(
     competencies = competencies_for(interview_type, job_title)
     questions: list[InterviewQuestion] = []
 
+    if llm_complete is not None:
+        try:
+            prompt = textwrap.dedent(f"""
+                Generate candidate-specific interview questions.
+                Interview type: {interview_type}
+                Role: {job_title}
+                Candidate summary: {candidate_summary[:1200]}
+                Competencies to cover: {', '.join(competencies)}
+                Skill gaps to probe: {', '.join(skill_gaps) or 'none flagged'}
+
+                Return JSON with one specific, non-generic, role-grounded interview
+                question per competency — something that could not apply equally to
+                any other role — plus a short rationale for each:
+                {{
+                  "questions": [
+                    {{"competency": "...", "text": "...", "rationale": "..."}}
+                  ]
+                }}
+            """).strip()
+            raw = llm_complete(prompt, system="You are a calibrated structured interviewer.")
+            import json
+            cleaned = re.sub(r"^```(?:json)?", "", raw.strip()).strip()
+            cleaned = re.sub(r"```$", "", cleaned).strip()
+            data = json.loads(cleaned)
+            for item in data.get("questions") or []:
+                text = (item.get("text") or "").strip()
+                competency = (item.get("competency") or "").strip()
+                if not text or not competency:
+                    continue
+                questions.append(InterviewQuestion(
+                    id=str(uuid.uuid4()),
+                    interview_id=interview_id,
+                    text=text,
+                    competency=competency,
+                    required=True,
+                    generated_by_ai=True,
+                    rationale=(item.get("rationale") or "").strip()
+                        or f"Core probe for {competency.replace('_', ' ')}.",
+                ))
+            if not questions:
+                raise ValueError("LLM returned no usable questions")
+
+            # 2. Skill-gap probes
+            for gap in skill_gaps[:2]:
+                questions.append(InterviewQuestion(
+                    id=str(uuid.uuid4()),
+                    interview_id=interview_id,
+                    text=f"Your resume doesn't call out {gap}. Walk me through any exposure you have to it and how you'd ramp.",
+                    competency="technical_depth",
+                    required=True,
+                    generated_by_ai=True,
+                    rationale=f"Resume gap on {gap}.",
+                ))
+
+            # 3. Candidate-specific probe
+            if "owned" in candidate_summary.lower():
+                questions.append(InterviewQuestion(
+                    id=str(uuid.uuid4()),
+                    interview_id=interview_id,
+                    text="You mention ownership of multiple workstreams — pick the one that taught you the most, walk me through what you'd do differently.",
+                    competency="self_awareness",
+                    required=False,
+                    generated_by_ai=True,
+                    rationale="Resume signals strong ownership; probe self-awareness behind it.",
+                ))
+
+            out = questions[:n_questions]
+            with _lock:
+                _questions[interview_id] = out
+            return out
+        except Exception:
+            questions = []
+
     # 1. Core competency questions
     for comp in competencies:
         templates = _LOCAL_QUESTION_TEMPLATES.get(comp, [])
