@@ -1,0 +1,876 @@
+diff --git a/packages/hr-web-employee/src/app/app/cases/page.tsx b/packages/hr-web-employee/src/app/app/cases/page.tsx
+index 064addf..857e401 100644
+--- a/packages/hr-web-employee/src/app/app/cases/page.tsx
++++ b/packages/hr-web-employee/src/app/app/cases/page.tsx
+@@ -5,6 +5,7 @@ import { apiFetch, apiPost } from "@/lib/api";
+ import { Button } from "@/components/Button";
+ import { Input } from "@/components/Input";
+ import { Textarea } from "@/components/Textarea";
++import { useToast } from "@/components/Toast";
+ 
+ type CaseReport = {
+   id: string;
+@@ -18,11 +19,11 @@ type CaseReport = {
+ 
+ export default function CasesPage() {
+   const qc = useQueryClient();
++  const toast = useToast();
+   const [category, setCategory] = useState("harassment");
+   const [severity, setSeverity] = useState("medium");
+   const [details, setDetails] = useState("");
+   const [anonymous, setAnonymous] = useState(true);
+-  const [msg, setMsg] = useState<string | null>(null);
+ 
+   const { data, isLoading, error } = useQuery({
+     queryKey: ["cases"],
+@@ -30,14 +31,13 @@ export default function CasesPage() {
+   });
+ 
+   async function submit() {
+-    setMsg(null);
+     try {
+       await apiPost("/cases", { category, severity, details, is_anonymous: anonymous, reporter_employee_id: null });
+       setDetails("");
+-      setMsg("Submitted.");
++      toast.success("Report submitted.");
+       await qc.invalidateQueries({ queryKey: ["cases"] });
+     } catch (e: any) {
+-      setMsg(e.message);
++      toast.error(`Couldn't submit report: ${e.message}`);
+     }
+   }
+ 
+@@ -61,7 +61,6 @@ export default function CasesPage() {
+         </label>
+         <div className="flex items-center gap-2">
+           <Button onClick={submit} disabled={!details.trim()}>Submit</Button>
+-          {msg ? <div className="text-sm text-black/70">{msg}</div> : null}
+         </div>
+       </div>
+ 
+diff --git a/packages/hr-web-employee/src/app/app/onboarding/page.tsx b/packages/hr-web-employee/src/app/app/onboarding/page.tsx
+index 6b5c55a..734b981 100644
+--- a/packages/hr-web-employee/src/app/app/onboarding/page.tsx
++++ b/packages/hr-web-employee/src/app/app/onboarding/page.tsx
+@@ -7,6 +7,7 @@ import { PageHeader, Surface, SectionTitle, Pill, Action, EmptyState, Divider }
+ import { WorkflowTimeline, stepFromSubtasks, type WorkflowStep, type WorkflowSubtask, type StepStatus } from "@/components/WorkflowTimeline";
+ import { Input } from "@/components/Input";
+ import { Textarea } from "@/components/Textarea";
++import { useToast } from "@/components/Toast";
+ 
+ type Packet = {
+   id: string;
+@@ -90,6 +91,7 @@ function packetJourney(packet: Packet, activeKey: string): WorkflowStep[] {
+ 
+ export default function OnboardingPage() {
+   const qc = useQueryClient();
++  const toast = useToast();
+   const { data, isLoading, error } = useQuery({
+     queryKey: ["packets"],
+     queryFn: () => apiFetch<Packet[]>("/onboarding/packets"),
+@@ -109,24 +111,21 @@ export default function OnboardingPage() {
+   const step = availableSteps[stepIdx];
+   const [form, setForm] = useState<Record<string, any>>({});
+   const [saving, setSaving] = useState(false);
+-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+   const [requestNote, setRequestNote] = useState("");
+   const [requestBusy, setRequestBusy] = useState(false);
+-  const [requestErr, setRequestErr] = useState<string | null>(null);
+ 
+   const isLastStep = stepIdx === availableSteps.length - 1;
+ 
+   async function saveStep() {
+     if (!packet) return;
+     setSaving(true);
+-    setSaveMsg(null);
+     try {
+       const submitted_items = { ...(packet.submitted_items ?? {}), [step.key]: { ...form, saved_at: new Date().toISOString() } };
+       await apiPatch<Packet>(`/onboarding/packets/${packet.id}`, { submitted_items });
+       await qc.invalidateQueries({ queryKey: ["packets"] });
+-      setSaveMsg("Saved.");
++      toast.success("Saved.");
+     } catch (e) {
+-      setSaveMsg("Error saving: " + (e as Error).message);
++      toast.error("Couldn't save: " + (e as Error).message);
+     } finally {
+       setSaving(false);
+     }
+@@ -136,20 +135,19 @@ export default function OnboardingPage() {
+     await saveStep();
+     setStepIdx((i) => Math.min(i + 1, availableSteps.length - 1));
+     setForm({});
+-    setSaveMsg(null);
+   }
+ 
+   async function finish() {
+     if (!packet) return;
+     setSaving(true);
+-    setSaveMsg(null);
+     try {
+       const submitted_items = { ...(packet.submitted_items ?? {}), [step.key]: { ...form, saved_at: new Date().toISOString() } };
+       await apiPatch<Packet>(`/onboarding/packets/${packet.id}`, { submitted_items });
+       await apiPatch<Packet>(`/onboarding/packets/${packet.id}`, { status: "completed" });
+       await qc.invalidateQueries({ queryKey: ["packets"] });
++      toast.success("Onboarding submitted. HR will review it next.");
+     } catch (e) {
+-      setSaveMsg("Error: " + (e as Error).message);
++      toast.error("Couldn't submit: " + (e as Error).message);
+     } finally {
+       setSaving(false);
+     }
+@@ -157,13 +155,13 @@ export default function OnboardingPage() {
+ 
+   async function sendHrRequest() {
+     setRequestBusy(true);
+-    setRequestErr(null);
+     try {
+       await apiPost<PacketRequest>("/onboarding/packet-requests", { message: requestNote.trim() || undefined });
+       await qc.invalidateQueries({ queryKey: ["onboarding-packet-request-me"] });
+       setRequestNote("");
++      toast.success("Request sent to HR.");
+     } catch (e) {
+-      setRequestErr((e as Error).message);
++      toast.error("Couldn't send request: " + (e as Error).message);
+     } finally {
+       setRequestBusy(false);
+     }
+@@ -201,7 +199,6 @@ export default function OnboardingPage() {
+                   onChange={(e) => setRequestNote(e.target.value)}
+                   placeholder="Optional"
+                 />
+-                {requestErr && <div className="text-sm text-danger-fg">{requestErr}</div>}
+                 <Action onClick={sendHrRequest} variant="primary" disabled={requestBusy}>
+                   {requestBusy ? "Sending…" : "Request packet from HR"}
+                 </Action>
+@@ -270,7 +267,7 @@ export default function OnboardingPage() {
+                   return (
+                     <button
+                       key={s.key}
+-                      onClick={() => { setStepIdx(i); setForm({}); setSaveMsg(null); }}
++                      onClick={() => { setStepIdx(i); setForm({}); }}
+                       className={`text-2xs uppercase tracking-eyebrow px-2 py-1 rounded-md border transition-colors duration-150 ease-calm ${
+                         i === stepIdx
+                           ? "bg-accent text-accent-fg border-accent"
+@@ -317,16 +314,10 @@ export default function OnboardingPage() {
+             </div>
+           )}
+ 
+-          {saveMsg && (
+-            <div className={`mt-3 text-sm ${saveMsg.startsWith("Error") ? "text-danger-fg" : "text-success-fg"}`}>
+-              {saveMsg}
+-            </div>
+-          )}
+-
+           <Divider className="my-4" />
+ 
+           <div className="flex items-center justify-between">
+-            <Action variant="subtle" onClick={() => { setStepIdx(Math.max(0, stepIdx - 1)); setForm({}); setSaveMsg(null); }} disabled={stepIdx === 0}>
++            <Action variant="subtle" onClick={() => { setStepIdx(Math.max(0, stepIdx - 1)); setForm({}); }} disabled={stepIdx === 0}>
+               Back
+             </Action>
+             <div className="flex gap-2">
+@@ -350,13 +341,19 @@ export default function OnboardingPage() {
+  * (equipment, intros, handbook…). Complements the document packet above. */
+ function MyChecklistSection() {
+   const qc = useQueryClient();
++  const toast = useToast();
+   const q = useQuery({
+     queryKey: ["my-checklists"],
+     queryFn: () => apiFetch<ChecklistT[]>("/checklists/me"),
+   });
+   const toggle = async (t: ChecklistTaskT) => {
+-    await apiPost(`/checklists/tasks/${t.id}/${t.status === "done" ? "reopen" : "complete"}`, {});
+-    await qc.invalidateQueries({ queryKey: ["my-checklists"] });
++    try {
++      await apiPost(`/checklists/tasks/${t.id}/${t.status === "done" ? "reopen" : "complete"}`, {});
++      await qc.invalidateQueries({ queryKey: ["my-checklists"] });
++      toast.success(t.status === "done" ? `Reopened "${t.title}"` : `Marked "${t.title}" done`);
++    } catch (e) {
++      toast.error(`Couldn't update "${t.title}": ${(e as Error).message}`);
++    }
+   };
+   const lists = q.data ?? [];
+   if (q.isLoading || lists.length === 0) return null;
+diff --git a/packages/hr-web-employee/src/components/DecisionInbox.tsx b/packages/hr-web-employee/src/components/DecisionInbox.tsx
+index 7e33ab4..91d1490 100644
+--- a/packages/hr-web-employee/src/components/DecisionInbox.tsx
++++ b/packages/hr-web-employee/src/components/DecisionInbox.tsx
+@@ -1,9 +1,12 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
++import { apiPost } from "@/lib/api";
++import { useToast } from "./Toast";
+ 
+ export default function DecisionInbox() {
+   const [events, setEvents] = useState<any[]>([]);
++  const toast = useToast();
+ 
+   useEffect(() => {
+     function handler(e: any) {
+@@ -31,11 +34,19 @@ export default function DecisionInbox() {
+                 key={a.id}
+                 className="px-3 py-2 bg-black text-white rounded-lg"
+                 onClick={() =>
+-                  fetch("/api/decisions/respond", {
+-                    method: "POST",
+-                    headers: { "Content-Type": "application/json" },
+-                    body: JSON.stringify({ id: e.id, action: a.id })
+-                  })
++                  // WAS: an unauthenticated raw fetch("/api/decisions/respond", ...)
++                  // with no Authorization header and no error handling, so every
++                  // click 401'd against require_org and failed completely silently.
++                  // apiPost attaches the bearer token the same way every other
++                  // mutation in this app does.
++                  apiPost("/decisions/respond", { id: e.id, action: a.id })
++                    .then(() => {
++                      toast.success(`${a.label} recorded for "${e.title}"`);
++                      setEvents((prev) => prev.filter((ev) => ev !== e));
++                    })
++                    .catch((err: Error) => {
++                      toast.error(`Couldn't record "${a.label}": ${err.message}`);
++                    })
+                 }
+               >
+                 {a.label}
+diff --git a/packages/hr-web-employee/src/components/Providers.tsx b/packages/hr-web-employee/src/components/Providers.tsx
+index b8c8320..3cbcc93 100644
+--- a/packages/hr-web-employee/src/components/Providers.tsx
++++ b/packages/hr-web-employee/src/components/Providers.tsx
+@@ -1,7 +1,13 @@
+ "use client";
+ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import { useState } from "react";
++import { ToastProvider } from "./Toast";
++
+ export function Providers({ children }: { children: React.ReactNode }) {
+   const [client] = useState(() => new QueryClient());
+-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
++  return (
++    <QueryClientProvider client={client}>
++      <ToastProvider>{children}</ToastProvider>
++    </QueryClientProvider>
++  );
+ }
+diff --git a/packages/hr-web-employee/src/components/Toast.tsx b/packages/hr-web-employee/src/components/Toast.tsx
+new file mode 100644
+index 0000000..47bd123
+--- /dev/null
++++ b/packages/hr-web-employee/src/components/Toast.tsx
+@@ -0,0 +1,187 @@
++"use client";
++/**
++ * Platform-wide toast notifications. (#127 / #141)
++ *
++ * WHY THIS EXISTS
++ * Before this, form actions gave no feedback at all, or a bare inline
++ * `<div>{msg}</div>` that only the person still looking at that exact spot
++ * on the page would ever see (see Cases, Onboarding). Actions that failed
++ * silently (DecisionInbox's `.catch(() => {})`) looked indistinguishable
++ * from actions that succeeded. This gives every submit/approve/deny a
++ * visible, consistent confirmation, whether it worked or not.
++ *
++ * USAGE
++ *   const toast = useToast();
++ *   toast.success("Packet created");
++ *   toast.error("Could not save: " + detailMessage(e));
++ *
++ * Wrapped around the app once, in Providers.tsx.
++ */
++import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
++import clsx from "clsx";
++import { IconCheck, IconClose } from "./icons";
++
++export type ToastTone = "success" | "error" | "warn" | "info";
++
++type ToastInput = {
++  message: string;
++  title?: string;
++  tone?: ToastTone;
++  /** ms before auto-dismiss. 0 disables auto-dismiss. Defaults by tone. */
++  duration?: number;
++};
++
++type ToastItem = ToastInput & { id: number; tone: ToastTone };
++
++type ToastAPI = {
++  show: (input: ToastInput) => number;
++  success: (message: string, opts?: Omit<ToastInput, "message" | "tone">) => number;
++  error: (message: string, opts?: Omit<ToastInput, "message" | "tone">) => number;
++  warn: (message: string, opts?: Omit<ToastInput, "message" | "tone">) => number;
++  info: (message: string, opts?: Omit<ToastInput, "message" | "tone">) => number;
++  dismiss: (id: number) => void;
++};
++
++const ToastContext = createContext<ToastAPI | null>(null);
++
++const TONE_CLASSES: Record<ToastTone, string> = {
++  success: "bg-success-bg text-success-fg border-success-line",
++  error: "bg-danger-bg text-danger-fg border-danger-line",
++  warn: "bg-warn-bg text-warn-fg border-warn-line",
++  info: "bg-info-bg text-info-fg border-info-line",
++};
++
++// Errors stay up longer than a routine success — worth the extra second to read.
++const DEFAULT_DURATION: Record<ToastTone, number> = {
++  success: 4000,
++  info: 4000,
++  warn: 5000,
++  error: 6500,
++};
++
++const svgBase = {
++  width: 14,
++  height: 14,
++  viewBox: "0 0 24 24",
++  fill: "none",
++  stroke: "currentColor",
++  strokeWidth: 1.6,
++  strokeLinecap: "round" as const,
++  strokeLinejoin: "round" as const,
++};
++
++function ToastIcon({ tone }: { tone: ToastTone }) {
++  if (tone === "success") return <IconCheck size={14} />;
++  if (tone === "error")
++    return (
++      <svg {...svgBase} aria-hidden>
++        <circle cx="12" cy="12" r="9" />
++        <path d="M12 7.5v5.5" />
++        <path d="M12 16.5h.01" />
++      </svg>
++    );
++  if (tone === "warn")
++    return (
++      <svg {...svgBase} aria-hidden>
++        <path d="M10.3 3.9 2.9 17a1.6 1.6 0 0 0 1.4 2.4h15.4a1.6 1.6 0 0 0 1.4-2.4L13.7 3.9a1.6 1.6 0 0 0-2.8 0Z" />
++        <path d="M12 9.5v4" />
++        <path d="M12 16.5h.01" />
++      </svg>
++    );
++  return (
++    <svg {...svgBase} aria-hidden>
++      <circle cx="12" cy="12" r="9" />
++      <path d="M12 11v5" />
++      <path d="M12 8h.01" />
++    </svg>
++  );
++}
++
++export function ToastProvider({ children }: { children: React.ReactNode }) {
++  const [toasts, setToasts] = useState<ToastItem[]>([]);
++  const idRef = useRef(0);
++  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
++
++  const dismiss = useCallback((id: number) => {
++    setToasts((prev) => prev.filter((t) => t.id !== id));
++    const timer = timers.current.get(id);
++    if (timer) {
++      clearTimeout(timer);
++      timers.current.delete(id);
++    }
++  }, []);
++
++  const show = useCallback(
++    (input: ToastInput) => {
++      const id = ++idRef.current;
++      const tone = input.tone ?? "info";
++      const duration = input.duration ?? DEFAULT_DURATION[tone];
++      setToasts((prev) => [...prev, { ...input, id, tone }]);
++      if (duration > 0) {
++        timers.current.set(id, setTimeout(() => dismiss(id), duration));
++      }
++      return id;
++    },
++    [dismiss],
++  );
++
++  const api = useMemo<ToastAPI>(
++    () => ({
++      show,
++      success: (message, opts) => show({ ...opts, message, tone: "success" }),
++      error: (message, opts) => show({ ...opts, message, tone: "error" }),
++      warn: (message, opts) => show({ ...opts, message, tone: "warn" }),
++      info: (message, opts) => show({ ...opts, message, tone: "info" }),
++      dismiss,
++    }),
++    [show, dismiss],
++  );
++
++  return (
++    <ToastContext.Provider value={api}>
++      {children}
++      {/* Fixed viewport, top-right so it never collides with DecisionInbox
++         (bottom-right). aria-live announces new toasts to screen readers
++         without needing focus to move. */}
++      <div
++        className="pointer-events-none fixed top-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2"
++        role="region"
++        aria-label="Notifications"
++      >
++        {toasts.map((t) => (
++          <div
++            key={t.id}
++            role="status"
++            aria-live="polite"
++            className={clsx(
++              "fp-slide-in pointer-events-auto flex items-start gap-2.5 rounded-lg border p-3 shadow-lift",
++              TONE_CLASSES[t.tone],
++            )}
++          >
++            <span className="mt-0.5 shrink-0" aria-hidden>
++              <ToastIcon tone={t.tone} />
++            </span>
++            <div className="min-w-0 flex-1">
++              {t.title ? <div className="text-sm font-medium">{t.title}</div> : null}
++              <div className="text-sm break-words">{t.message}</div>
++            </div>
++            <button
++              type="button"
++              onClick={() => dismiss(t.id)}
++              aria-label="Dismiss notification"
++              className="shrink-0 opacity-60 transition-opacity hover:opacity-100"
++            >
++              <IconClose size={14} />
++            </button>
++          </div>
++        ))}
++      </div>
++    </ToastContext.Provider>
++  );
++}
++
++export function useToast(): ToastAPI {
++  const ctx = useContext(ToastContext);
++  if (!ctx) throw new Error("useToast must be used within a ToastProvider");
++  return ctx;
++}
+diff --git a/packages/hr-web-employer/src/app/app/cases/page.tsx b/packages/hr-web-employer/src/app/app/cases/page.tsx
+index c6e0d34..1f4bd71 100644
+--- a/packages/hr-web-employer/src/app/app/cases/page.tsx
++++ b/packages/hr-web-employer/src/app/app/cases/page.tsx
+@@ -1,11 +1,12 @@
+ "use client";
+ import { useState } from "react";
+ import { useQuery, useQueryClient } from "@tanstack/react-query";
+-import { apiFetch, apiPost } from "@/lib/api";
++import { apiFetch, apiPost, detailMessage } from "@/lib/api";
+ import { Button } from "@/components/Button";
+ import { Input } from "@/components/Input";
+ import { Textarea } from "@/components/Textarea";
+ import { PageHeader, Surface, SectionTitle, StatusPill, EmptyState } from "@/components/ds";
++import { useToast } from "@/components/Toast";
+ 
+ type CaseReport = {
+   id: string;
+@@ -19,11 +20,11 @@ type CaseReport = {
+ 
+ export default function CasesPage() {
+   const qc = useQueryClient();
++  const toast = useToast();
+   const [category, setCategory] = useState("harassment");
+   const [severity, setSeverity] = useState("medium");
+   const [details, setDetails] = useState("");
+   const [anonymous, setAnonymous] = useState(true);
+-  const [msg, setMsg] = useState<string | null>(null);
+ 
+   const { data, isLoading, error } = useQuery({
+     queryKey: ["cases"],
+@@ -31,14 +32,13 @@ export default function CasesPage() {
+   });
+ 
+   async function submit() {
+-    setMsg(null);
+     try {
+       await apiPost("/cases", { category, severity, details, is_anonymous: anonymous, reporter_employee_id: null });
+       setDetails("");
+-      setMsg("Submitted.");
++      toast.success("Report submitted.");
+       await qc.invalidateQueries({ queryKey: ["cases"] });
+     } catch (e: any) {
+-      setMsg(e.message);
++      toast.error(`Couldn't submit report: ${detailMessage(e)}`);
+     }
+   }
+ 
+diff --git a/packages/hr-web-employer/src/app/app/onboarding/page.tsx b/packages/hr-web-employer/src/app/app/onboarding/page.tsx
+index 914e7d0..fbd3d49 100644
+--- a/packages/hr-web-employer/src/app/app/onboarding/page.tsx
++++ b/packages/hr-web-employer/src/app/app/onboarding/page.tsx
+@@ -2,11 +2,12 @@
+ 
+ import { useMemo, useState } from "react";
+ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+-import { apiFetch, apiPost } from "@/lib/api";
++import { apiFetch, apiPost, detailMessage } from "@/lib/api";
+ 
+ import { PageHeader, Surface, SectionTitle, Pill, StatusPill, Action, LinkAction, EmptyState, Divider } from "@/components/ds";
+ import { WorkflowTimeline, defaultOnboardingTemplate, stepFromSubtasks, type WorkflowStep, type StepStatus } from "@/components/WorkflowTimeline";
+ import { IconArrowUpRight } from "@/components/icons";
++import { useToast } from "@/components/Toast";
+ 
+ type Employee = {
+   id: string;
+@@ -102,10 +103,9 @@ function packetTimeline(pkt: OnboardingPacket, employee?: Employee): WorkflowSte
+ 
+ export default function OnboardingPage() {
+   const qc = useQueryClient();
++  const toast = useToast();
+   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+   const [expanded, setExpanded] = useState<string | null>(null);
+-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+ 
+   const empQ = useQuery({
+     queryKey: ["employees"],
+@@ -127,28 +127,31 @@ export default function OnboardingPage() {
+         requested_items: REQUESTED_ITEMS_DEFAULT,
+       }),
+     onSuccess: (data) => {
+-      setSuccessMsg(`Onboarding packet created · ${data.id.slice(0, 8)}`);
+-      setErrorMsg(null);
++      toast.success(`Onboarding packet created · ${data.id.slice(0, 8)}`);
+       setSelectedEmployeeId("");
+       qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
+       qc.invalidateQueries({ queryKey: ["onboarding-packet-requests"] });
+     },
+-    onError: (e: Error) => { setErrorMsg(e.message); setSuccessMsg(null); },
++    onError: (e: Error) => toast.error(`Couldn't create packet: ${detailMessage(e)}`),
+   });
+ 
+   const verifyMutation = useMutation({
+     mutationFn: (packetId: string) => apiPost(`/onboarding/packets/${packetId}/verify`, {}),
+-    onSuccess: () => qc.invalidateQueries({ queryKey: ["onboarding-packets"] }),
+-    onError: (e: Error) => setErrorMsg(e.message),
++    onSuccess: () => {
++      toast.success("Packet verified");
++      qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
++    },
++    onError: (e: Error) => toast.error(`Couldn't verify packet: ${detailMessage(e)}`),
+   });
+ 
+   const activateMutation = useMutation({
+     mutationFn: (packetId: string) => apiPost(`/onboarding/packets/${packetId}/activate`, {}),
+     onSuccess: () => {
++      toast.success("Employee activated");
+       qc.invalidateQueries({ queryKey: ["onboarding-packets"] });
+       qc.invalidateQueries({ queryKey: ["employees"] });
+     },
+-    onError: (e: Error) => setErrorMsg(e.message),
++    onError: (e: Error) => toast.error(`Couldn't activate employee: ${detailMessage(e)}`),
+   });
+ 
+   const employees = empQ.data ?? [];
+@@ -243,8 +246,7 @@ export default function OnboardingPage() {
+             </Action>
+           </div>
+         )}
+-        {successMsg && <div className="mt-3 text-sm text-success-fg">{successMsg}</div>}
+-        {errorMsg && <div className="mt-3 text-sm text-danger-fg">{errorMsg}</div>}
++
+       </Surface>
+ 
+       <Surface>
+diff --git a/packages/hr-web-employer/src/app/app/talent/page.tsx b/packages/hr-web-employer/src/app/app/talent/page.tsx
+index df5c50d..9df71ba 100644
+--- a/packages/hr-web-employer/src/app/app/talent/page.tsx
++++ b/packages/hr-web-employer/src/app/app/talent/page.tsx
+@@ -2,11 +2,12 @@
+ import { useMemo, useState } from "react";
+ import Link from "next/link";
+ import { useQuery, useQueryClient } from "@tanstack/react-query";
+-import { apiFetch, apiPost } from "@/lib/api";
++import { apiFetch, apiPost, detailMessage } from "@/lib/api";
+ import { PIPELINE_STAGES, toStage, type Stage as SharedStage } from "@/lib/pipelineStages";
+ 
+ import { PageHeader, Surface, SectionTitle, Pill, Action, LinkAction, EmptyState, Divider, Avatar } from "@/components/ds";
+ import { IconArrowUpRight, IconSparkle } from "@/components/icons";
++import { useToast } from "@/components/Toast";
+ 
+ type Job = { id: string; title: string; location?: string | null; status: string; description: string; created_at: string };
+ type Candidate = { id: string; full_name: string; email: string; status: string; ai_score?: number | null; ai_summary?: string | null; resume_text?: string | null; job_posting_id: string; created_at: string };
+@@ -103,6 +104,7 @@ function ChipRow({ label, tone, chips }: { label: string; tone: "success" | "dan
+ 
+ export default function TalentPage() {
+   const qc = useQueryClient();
++  const toast = useToast();
+   const [selectedJob, setSelectedJob] = useState<string>("");
+   const [expanded, setExpanded] = useState<string | null>(null);
+   const [ranked, setRanked] = useState<Ranked[] | null>(null);
+@@ -139,14 +141,22 @@ export default function TalentPage() {
+       const res = await apiPost<{ items: Ranked[] }>(`/resume-ai/screen-job/${selectedJob}`, {});
+       setRanked(res.items);
+       await qc.invalidateQueries({ queryKey: ["candidates"] });
++      toast.success(`Ranked ${res.items.length} candidate${res.items.length === 1 ? "" : "s"}`);
++    } catch (e) {
++      toast.error(`AI ranking failed: ${detailMessage(e)}`);
+     } finally {
+       setRunning(false);
+     }
+   }
+ 
+   async function moveStage(cand: Candidate, stage: Stage) {
+-    await apiPost(`/recruiting/candidates/${cand.id}/stage?stage=${stage}`, {});
+-    await qc.invalidateQueries({ queryKey: ["candidates"] });
++    try {
++      await apiPost(`/recruiting/candidates/${cand.id}/stage?stage=${stage}`, {});
++      await qc.invalidateQueries({ queryKey: ["candidates"] });
++      toast.success(`${cand.full_name} moved to ${stage}`);
++    } catch (e) {
++      toast.error(`Couldn't move ${cand.full_name}: ${detailMessage(e)}`);
++    }
+   }
+ 
+   return (
+diff --git a/packages/hr-web-employer/src/components/DecisionInbox.tsx b/packages/hr-web-employer/src/components/DecisionInbox.tsx
+index 9cee3fd..2f493af 100644
+--- a/packages/hr-web-employer/src/components/DecisionInbox.tsx
++++ b/packages/hr-web-employer/src/components/DecisionInbox.tsx
+@@ -1,10 +1,12 @@
+ "use client";
+ 
+ import { useEffect, useState } from "react";
+-import { apiPost } from "@/lib/api";
++import { apiPost, detailMessage } from "@/lib/api";
++import { useToast } from "./Toast";
+ 
+ export default function DecisionInbox() {
+   const [events, setEvents] = useState<any[]>([]);
++  const toast = useToast();
+ 
+   useEffect(() => {
+     function handler(e: any) {
+@@ -34,9 +36,14 @@ export default function DecisionInbox() {
+                 onClick={() =>
+                   // Route to the HR backend via apiPost (env base + demo token),
+                   // not a bare /api path that the proxy would send elsewhere.
+-                  apiPost("/decisions/respond", { id: e.id, action: a.id }).catch(
+-                    () => {}
+-                  )
++                  apiPost("/decisions/respond", { id: e.id, action: a.id })
++                    .then(() => {
++                      toast.success(`${a.label} recorded for "${e.title}"`);
++                      setEvents((prev) => prev.filter((ev) => ev !== e));
++                    })
++                    .catch((err) => {
++                      toast.error(`Couldn't record "${a.label}": ${detailMessage(err)}`);
++                    })
+                 }
+               >
+                 {a.label}
+diff --git a/packages/hr-web-employer/src/components/Providers.tsx b/packages/hr-web-employer/src/components/Providers.tsx
+index cb79df8..0948fc3 100644
+--- a/packages/hr-web-employer/src/components/Providers.tsx
++++ b/packages/hr-web-employer/src/components/Providers.tsx
+@@ -1,6 +1,7 @@
+ "use client";
+ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import { useState } from "react";
++import { ToastProvider } from "./Toast";
+ 
+ /**
+  * WHY THE RETRY POLICY IS SPELLED OUT
+@@ -30,5 +31,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
+         defaultOptions: { queries: { retry: shouldRetry } },
+       }),
+   );
+-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
++  return (
++    <QueryClientProvider client={client}>
++      <ToastProvider>{children}</ToastProvider>
++    </QueryClientProvider>
++  );
+ }
+diff --git a/packages/hr-web-employer/src/components/Toast.tsx b/packages/hr-web-employer/src/components/Toast.tsx
+new file mode 100644
+index 0000000..47bd123
+--- /dev/null
++++ b/packages/hr-web-employer/src/components/Toast.tsx
+@@ -0,0 +1,187 @@
++"use client";
++/**
++ * Platform-wide toast notifications. (#127 / #141)
++ *
++ * WHY THIS EXISTS
++ * Before this, form actions gave no feedback at all, or a bare inline
++ * `<div>{msg}</div>` that only the person still looking at that exact spot
++ * on the page would ever see (see Cases, Onboarding). Actions that failed
++ * silently (DecisionInbox's `.catch(() => {})`) looked indistinguishable
++ * from actions that succeeded. This gives every submit/approve/deny a
++ * visible, consistent confirmation, whether it worked or not.
++ *
++ * USAGE
++ *   const toast = useToast();
++ *   toast.success("Packet created");
++ *   toast.error("Could not save: " + detailMessage(e));
++ *
++ * Wrapped around the app once, in Providers.tsx.
++ */
++import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
++import clsx from "clsx";
++import { IconCheck, IconClose } from "./icons";
++
++export type ToastTone = "success" | "error" | "warn" | "info";
++
++type ToastInput = {
++  message: string;
++  title?: string;
++  tone?: ToastTone;
++  /** ms before auto-dismiss. 0 disables auto-dismiss. Defaults by tone. */
++  duration?: number;
++};
++
++type ToastItem = ToastInput & { id: number; tone: ToastTone };
++
++type ToastAPI = {
++  show: (input: ToastInput) => number;
++  success: (message: string, opts?: Omit<ToastInput, "message" | "tone">) => number;
++  error: (message: string, opts?: Omit<ToastInput, "message" | "tone">) => number;
++  warn: (message: string, opts?: Omit<ToastInput, "message" | "tone">) => number;
++  info: (message: string, opts?: Omit<ToastInput, "message" | "tone">) => number;
++  dismiss: (id: number) => void;
++};
++
++const ToastContext = createContext<ToastAPI | null>(null);
++
++const TONE_CLASSES: Record<ToastTone, string> = {
++  success: "bg-success-bg text-success-fg border-success-line",
++  error: "bg-danger-bg text-danger-fg border-danger-line",
++  warn: "bg-warn-bg text-warn-fg border-warn-line",
++  info: "bg-info-bg text-info-fg border-info-line",
++};
++
++// Errors stay up longer than a routine success — worth the extra second to read.
++const DEFAULT_DURATION: Record<ToastTone, number> = {
++  success: 4000,
++  info: 4000,
++  warn: 5000,
++  error: 6500,
++};
++
++const svgBase = {
++  width: 14,
++  height: 14,
++  viewBox: "0 0 24 24",
++  fill: "none",
++  stroke: "currentColor",
++  strokeWidth: 1.6,
++  strokeLinecap: "round" as const,
++  strokeLinejoin: "round" as const,
++};
++
++function ToastIcon({ tone }: { tone: ToastTone }) {
++  if (tone === "success") return <IconCheck size={14} />;
++  if (tone === "error")
++    return (
++      <svg {...svgBase} aria-hidden>
++        <circle cx="12" cy="12" r="9" />
++        <path d="M12 7.5v5.5" />
++        <path d="M12 16.5h.01" />
++      </svg>
++    );
++  if (tone === "warn")
++    return (
++      <svg {...svgBase} aria-hidden>
++        <path d="M10.3 3.9 2.9 17a1.6 1.6 0 0 0 1.4 2.4h15.4a1.6 1.6 0 0 0 1.4-2.4L13.7 3.9a1.6 1.6 0 0 0-2.8 0Z" />
++        <path d="M12 9.5v4" />
++        <path d="M12 16.5h.01" />
++      </svg>
++    );
++  return (
++    <svg {...svgBase} aria-hidden>
++      <circle cx="12" cy="12" r="9" />
++      <path d="M12 11v5" />
++      <path d="M12 8h.01" />
++    </svg>
++  );
++}
++
++export function ToastProvider({ children }: { children: React.ReactNode }) {
++  const [toasts, setToasts] = useState<ToastItem[]>([]);
++  const idRef = useRef(0);
++  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
++
++  const dismiss = useCallback((id: number) => {
++    setToasts((prev) => prev.filter((t) => t.id !== id));
++    const timer = timers.current.get(id);
++    if (timer) {
++      clearTimeout(timer);
++      timers.current.delete(id);
++    }
++  }, []);
++
++  const show = useCallback(
++    (input: ToastInput) => {
++      const id = ++idRef.current;
++      const tone = input.tone ?? "info";
++      const duration = input.duration ?? DEFAULT_DURATION[tone];
++      setToasts((prev) => [...prev, { ...input, id, tone }]);
++      if (duration > 0) {
++        timers.current.set(id, setTimeout(() => dismiss(id), duration));
++      }
++      return id;
++    },
++    [dismiss],
++  );
++
++  const api = useMemo<ToastAPI>(
++    () => ({
++      show,
++      success: (message, opts) => show({ ...opts, message, tone: "success" }),
++      error: (message, opts) => show({ ...opts, message, tone: "error" }),
++      warn: (message, opts) => show({ ...opts, message, tone: "warn" }),
++      info: (message, opts) => show({ ...opts, message, tone: "info" }),
++      dismiss,
++    }),
++    [show, dismiss],
++  );
++
++  return (
++    <ToastContext.Provider value={api}>
++      {children}
++      {/* Fixed viewport, top-right so it never collides with DecisionInbox
++         (bottom-right). aria-live announces new toasts to screen readers
++         without needing focus to move. */}
++      <div
++        className="pointer-events-none fixed top-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2"
++        role="region"
++        aria-label="Notifications"
++      >
++        {toasts.map((t) => (
++          <div
++            key={t.id}
++            role="status"
++            aria-live="polite"
++            className={clsx(
++              "fp-slide-in pointer-events-auto flex items-start gap-2.5 rounded-lg border p-3 shadow-lift",
++              TONE_CLASSES[t.tone],
++            )}
++          >
++            <span className="mt-0.5 shrink-0" aria-hidden>
++              <ToastIcon tone={t.tone} />
++            </span>
++            <div className="min-w-0 flex-1">
++              {t.title ? <div className="text-sm font-medium">{t.title}</div> : null}
++              <div className="text-sm break-words">{t.message}</div>
++            </div>
++            <button
++              type="button"
++              onClick={() => dismiss(t.id)}
++              aria-label="Dismiss notification"
++              className="shrink-0 opacity-60 transition-opacity hover:opacity-100"
++            >
++              <IconClose size={14} />
++            </button>
++          </div>
++        ))}
++      </div>
++    </ToastContext.Provider>
++  );
++}
++
++export function useToast(): ToastAPI {
++  const ctx = useContext(ToastContext);
++  if (!ctx) throw new Error("useToast must be used within a ToastProvider");
++  return ctx;
++}

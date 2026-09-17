@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiPost } from "@/lib/api";
+import { useToast } from "./Toast";
 
 export default function DecisionInbox() {
   const [events, setEvents] = useState<any[]>([]);
+  const toast = useToast();
 
   useEffect(() => {
     function handler(e: any) {
@@ -31,11 +34,19 @@ export default function DecisionInbox() {
                 key={a.id}
                 className="px-3 py-2 bg-black text-white rounded-lg"
                 onClick={() =>
-                  fetch("/api/decisions/respond", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ id: e.id, action: a.id })
-                  })
+                  // WAS: an unauthenticated raw fetch("/api/decisions/respond", ...)
+                  // with no Authorization header and no error handling, so every
+                  // click 401'd against require_org and failed completely silently.
+                  // apiPost attaches the bearer token the same way every other
+                  // mutation in this app does.
+                  apiPost("/decisions/respond", { id: e.id, action: a.id })
+                    .then(() => {
+                      toast.success(`${a.label} recorded for "${e.title}"`);
+                      setEvents((prev) => prev.filter((ev) => ev !== e));
+                    })
+                    .catch((err: Error) => {
+                      toast.error(`Couldn't record "${a.label}": ${err.message}`);
+                    })
                 }
               >
                 {a.label}
