@@ -65,7 +65,6 @@ export default function CasesPage() {
         </label>
         <div className="flex items-center gap-3">
           <Button onClick={submit} disabled={!details.trim()}>Submit</Button>
-          {msg ? <div className="text-sm text-body">{msg}</div> : null}
         </div>
       </Surface>
 
