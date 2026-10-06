@@ -156,10 +156,16 @@ def test_the_accountant_is_never_given_software_experience():
         )
 
 
-def test_generating_for_one_candidate_does_not_alter_another():
+def test_generating_for_one_candidate_does_not_alter_another(monkeypatch):
     """CROSS-INTERVIEW STATE. interview_copilot_service keeps interviews in
     process memory, so a leak between them is a live possibility rather than a
-    theoretical one."""
+    theoretical one.
+
+    This test needs the same input to give the same output, and a live model
+    never words things the same way twice, so generation is pinned to the local
+    templates here. The vocabulary leak tests above still run against whatever
+    generator is configured."""
+    monkeypatch.setattr(S, "llm_complete", None)
     accountant_before = _material(ACCOUNTANT)
     _material(ENGINEER)
     _material(DRIVER)
