@@ -14,6 +14,7 @@ defensible record.
 """
 from __future__ import annotations
 
+import asyncio
 import re
 import threading
 import uuid
@@ -24,6 +25,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import Actor, db_session, require_org
 from app.db.models import AuditEvent
@@ -35,6 +37,7 @@ from app.services.ai_interview_service import (
     summarize_interview,
 )
 from app.services import adaptive_interview_service as adaptive
+from app.services import answer_evaluation_service as evaluator
 from app.services import candidate_integrity_service as integrity
 from app.services.interview_fairness_service import check_question, fairness_summary
 
@@ -111,6 +114,12 @@ class _Session:
 
 _lock = threading.RLock()
 _sessions: dict[str, _Session] = {}
+_EVAL_CONCURRENCY = 4
+# Same wording as the no-answer summary in ai_interview_service.
+_FAIRNESS_NOTE = (
+    "AI scoring is assistive only. Final hiring decisions require human review. "
+    "Do not use this output as the sole basis for an offer or rejection."
+)
 
 
 def _allowed(actor: Actor) -> bool:
@@ -371,6 +380,69 @@ async def session_state(session_id: str, actor: Actor = Depends(require_org)):
             "done": done,
             "status": "completed" if sess.summary else "in_progress",
         }
+
+
+@router.post("/sessions/{session_id}/evaluate")
+async def evaluate_session(
+    session_id: str,
+    question_id: Optional[str] = None,
+    actor: Actor = Depends(require_org),
+):
+    """Score answered questions with the AI evaluator. Does not mutate the session."""
+    if not _allowed(actor):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    with _lock:
+        sess = _sessions.get(session_id)
+        if not sess or sess.org_id != actor.org_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        known_ids = {q.id for q in sess.questions}
+        if question_id is not None and question_id not in known_ids:
+            raise HTTPException(status_code=400, detail="Unknown question_id")
+        job_title = sess.job_title or ""
+        org_id = sess.org_id
+        pending: list[tuple[str, str, str, str]] = []
+        for q in sess.questions:
+            if question_id is not None and q.id != question_id:
+                continue
+            resp = sess.answers.get(q.id)
+            if resp is None:
+                continue
+            pending.append((q.id, q.text, q.competency or "", resp.answer or ""))
+
+    sem = asyncio.Semaphore(_EVAL_CONCURRENCY)
+
+    async def _one(qid: str, qtext: str, competency: str, answer: str) -> dict:
+        async with sem:
+            try:
+                result = await run_in_threadpool(
+                    evaluator.evaluate_answer,
+                    question=qtext,
+                    answer=answer,
+                    competency=competency,
+                    job_title=job_title,
+                    org_id=org_id,
+                )
+            except Exception:
+                result = {
+                    "competency": competency,
+                    "rating": None,
+                    "rating_label": "pending",
+                    "evidence": [],
+                    "strengths": [],
+                    "concerns": ["Evaluation unavailable."],
+                    "rationale": "Evaluation could not be completed.",
+                    "evaluated_by": "unavailable",
+                    "truncated": False,
+                }
+        return {**result, "question_id": qid, "question": qtext}
+
+    evaluations = list(await asyncio.gather(*[_one(*item) for item in pending]))
+    return {
+        "session_id": session_id,
+        "evaluated": len(evaluations),
+        "evaluations": evaluations,
+        "fairness_note": _FAIRNESS_NOTE,
+    }
 
 
 def _response_uniformity(answers: list[str]) -> Optional[float]:
