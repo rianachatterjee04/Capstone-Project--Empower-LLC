@@ -211,12 +211,16 @@ def _deps_module_restored():
         ("local", False),
     ],
 )
-def test_real_is_prod_across_env_values(monkeypatch, env_value, expect_prod):
+def test_real_is_prod_across_env_values(monkeypatch, tmp_path, env_value, expect_prod):
     """Exercise the REAL predicate — no monkeypatching of _is_prod."""
     monkeypatch.delenv("ENV", raising=False)
     monkeypatch.delenv("APP_ENV", raising=False)
     if env_value is not None:
         monkeypatch.setenv("ENV", env_value)
+    # Settings also reads ENV from a .env file in the working directory. Run
+    # from an empty folder so a developer's local .env cannot hide the
+    # "ENV is unset" case this test exists to check.
+    monkeypatch.chdir(tmp_path)
 
     import importlib
     from app.core import config as config_mod
