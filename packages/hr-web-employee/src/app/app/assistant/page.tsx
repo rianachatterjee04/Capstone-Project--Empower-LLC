@@ -5,7 +5,7 @@ import { Button } from "@/components/Button";
 
 type Answer = {
   question: string; answer: string; audience: string;
-  citations: { id: string; title: string; category: string }[];
+  citations: { id: string; title: string; category: string; excerpt?: string }[];
   needs_escalation: boolean; disclaimer: string;
 };
 
@@ -21,6 +21,7 @@ export default function AssistantPage() {
   const [question, setQuestion] = useState("");
   const [chat, setChat] = useState<{ role: "user" | "assistant"; q?: string; a?: Answer }[]>([]);
   const [busy, setBusy] = useState(false);
+  const [openCitation, setOpenCitation] = useState<string | null>(null);
 
   async function ask(q?: string) {
     const final = (q ?? question).trim();
@@ -56,8 +57,29 @@ export default function AssistantPage() {
               <div className="rounded-2xl bg-black/[0.04] px-4 py-3 text-sm">{m.a!.answer}</div>
               {m.a!.citations.length > 0 && (
                 <div className="flex flex-wrap gap-1 text-xs">
-                  {m.a!.citations.map((c) => <span key={c.id} className="rounded-full bg-white border border-black/15 px-2 py-0.5">📎 {c.title}</span>)}
+                  {m.a!.citations.map((c) => {
+                    const key = `${i}:${c.id}`;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setOpenCitation(openCitation === key ? null : key)}
+                        aria-expanded={openCitation === key}
+                        className={`rounded-full border px-2 py-0.5 hover:bg-black/5 ${openCitation === key ? "bg-black/5 border-black/40" : "bg-white border-black/15"}`}
+                      >
+                        📎 {c.title}
+                      </button>
+                    );
+                  })}
                 </div>
+              )}
+              {m.a!.citations.map((c) =>
+                openCitation === `${i}:${c.id}` ? (
+                  <div key={c.id} className="rounded-xl border border-black/10 bg-white p-3 text-xs">
+                    <div className="font-semibold mb-1">{c.title}</div>
+                    <div className="text-black/70 whitespace-pre-line">{c.excerpt ?? "Policy text unavailable."}</div>
+                  </div>
+                ) : null
               )}
               {m.a!.needs_escalation && <div className="rounded-xl bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900">Not in the policy library — your HR partner has been notified.</div>}
             </div>

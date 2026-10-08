@@ -12,11 +12,13 @@ interfaces are stable so swapping the backend doesn't change callers.
 from __future__ import annotations
 
 import math
+import re
 import textwrap
 import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
+from app.core.config import settings
 from app.services.embeddings import embedding
 
 try:
@@ -176,25 +178,59 @@ def list_documents(org_id: str) -> list[dict]:
     ]
 
 
+_STOPWORDS = frozenset(
+    "a about all an and any are as at be but by can could do does else for from get "
+    "give have how i if in is it its just me more my need of on or other our please "
+    "should so tell than that the their there this to us was we were what when where "
+    "which who why will with would you your".split()
+)
+
+
+def _stem(tok: str) -> str:
+    if len(tok) > 4 and tok.endswith("ies"):
+        return tok[:-3] + "y"
+    for suffix in ("ing", "ed", "es", "s"):
+        if len(tok) > len(suffix) + 2 and tok.endswith(suffix):
+            tok = tok[: -len(suffix)]
+            break
+    if len(tok) > 3 and tok.endswith("e"):
+        tok = tok[:-1]
+    return tok
+
+
+def _terms(text: str) -> set[str]:
+    return {
+        _stem(t)
+        for t in re.findall(r"[a-z0-9]+", text.lower())
+        if t not in _STOPWORDS and len(t) > 1
+    }
+
+
 def retrieve(org_id: str, question: str, top_k: int = 3) -> list[KnowledgeDoc]:
     docs = _ensure_seeded(org_id)
     if not question:
         return []
-    try:
-        qv = embedding(question)
-    except Exception:
-        qv = []
+    # Mock embeddings are a hash of the text, so their cosine similarity is noise.
+    semantic = settings.embeddings_provider != "mock"
+    qv: list[float] = []
+    if semantic:
+        try:
+            qv = embedding(question)
+        except Exception:
+            qv = []
 
+    q_terms = _terms(question)
     scored: list[tuple[float, KnowledgeDoc]] = []
-    qlow = question.lower()
     for d in docs:
         sem = _cosine(qv, d.embedding) if qv and d.embedding else 0.0
-        # cheap keyword fallback so the demo still works when embeddings are weak
-        kw = sum(1 for tok in qlow.split() if tok in d.body.lower()) / max(len(qlow.split()), 1)
-        score = 0.7 * sem + 0.3 * kw
+        kw = 0.0
+        if q_terms:
+            kw = len(q_terms & _terms(f"{d.title} {d.body}")) / len(q_terms)
+            kw += 0.5 * len(q_terms & _terms(d.title)) / len(q_terms)
+        score = 0.7 * sem + 0.3 * kw if qv else kw
         scored.append((score, d))
     scored.sort(key=lambda kv: kv[0], reverse=True)
-    return [d for _, d in scored[:top_k] if _ > 0]
+    return [d for score, d in scored[:top_k] if score > 0]
 
 
 def _llm_compose(question: str, contexts: list[KnowledgeDoc]) -> Optional[str]:
@@ -244,7 +280,7 @@ def answer(org_id: str, question: str, audience: str = "employee") -> dict:
         "answer": text,
         "audience": audience,
         "citations": [
-            {"id": c.id, "title": c.title, "category": c.category}
+            {"id": c.id, "title": c.title, "category": c.category, "excerpt": c.body}
             for c in contexts
         ],
         "needs_escalation": not contexts,

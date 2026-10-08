@@ -7,7 +7,7 @@ import { Input } from "@/components/Input";
 import { Textarea } from "@/components/Textarea";
 
 type Doc = { id: string; title: string; category: string; source: string; preview: string };
-type Citation = { id: string; title: string; category: string };
+type Citation = { id: string; title: string; category: string; excerpt?: string };
 type Answer = {
   question: string;
   answer: string;
@@ -32,6 +32,7 @@ export default function AssistantPage() {
   const [question, setQuestion] = useState("");
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [openCitation, setOpenCitation] = useState<string | null>(null);
 
   const [docTitle, setDocTitle] = useState("");
   const [docBody, setDocBody] = useState("");
@@ -93,12 +94,29 @@ export default function AssistantPage() {
                     <div className="rounded-2xl bg-black/[0.04] px-4 py-3 text-sm">{a.answer}</div>
                     {a.citations.length > 0 && (
                       <div className="flex flex-wrap gap-1 text-xs">
-                        {a.citations.map((c) => (
-                          <span key={c.id} className="rounded-full bg-white border border-black/15 px-2 py-0.5">
-                            📎 {c.title}
-                          </span>
-                        ))}
+                        {a.citations.map((c) => {
+                          const key = `${i}:${c.id}`;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => setOpenCitation(openCitation === key ? null : key)}
+                              aria-expanded={openCitation === key}
+                              className={`rounded-full border px-2 py-0.5 hover:bg-black/5 ${openCitation === key ? "bg-black/5 border-black/40" : "bg-white border-black/15"}`}
+                            >
+                              📎 {c.title}
+                            </button>
+                          );
+                        })}
                       </div>
+                    )}
+                    {a.citations.map((c) =>
+                      openCitation === `${i}:${c.id}` ? (
+                        <div key={c.id} className="rounded-xl border border-black/10 bg-white p-3 text-xs">
+                          <div className="font-semibold mb-1">{c.title}</div>
+                          <div className="text-black/70 whitespace-pre-line">{c.excerpt ?? "Policy text unavailable."}</div>
+                        </div>
+                      ) : null
                     )}
                     {a.needs_escalation && (
                       <div className="rounded-xl bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900">

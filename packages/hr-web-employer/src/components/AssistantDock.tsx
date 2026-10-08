@@ -10,7 +10,7 @@ type Answer = {
   question: string;
   answer: string;
   audience: string;
-  citations: { id: string; title: string; category: string }[];
+  citations: { id: string; title: string; category: string; excerpt?: string }[];
   needs_escalation: boolean;
   disclaimer: string;
 };
@@ -31,6 +31,7 @@ export function AssistantDock() {
   const [q, setQ] = useState("");
   const [chat, setChat] = useState<{ role: "user" | "assistant"; question?: string; answer?: Answer }[]>([]);
   const [busy, setBusy] = useState(false);
+  const [openCitation, setOpenCitation] = useState<string | null>(null);
 
   async function ask(text?: string) {
     const question = (text ?? q).trim();
@@ -90,10 +91,29 @@ export function AssistantDock() {
                   <div className="rounded-2xl bg-canvas border border-line px-3.5 py-2.5 text-sm text-ink whitespace-pre-line">{m.answer!.answer}</div>
                   {m.answer!.citations.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {m.answer!.citations.map((c) => (
-                        <Pill key={c.id} tone="neutral">📎 {c.title}</Pill>
-                      ))}
+                      {m.answer!.citations.map((c) => {
+                        const key = `${i}:${c.id}`;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => setOpenCitation(openCitation === key ? null : key)}
+                            aria-expanded={openCitation === key}
+                            className="rounded-full hover:opacity-80 transition-opacity"
+                          >
+                            <Pill tone={openCitation === key ? "info" : "neutral"}>📎 {c.title}</Pill>
+                          </button>
+                        );
+                      })}
                     </div>
+                  )}
+                  {m.answer!.citations.map((c) =>
+                    openCitation === `${i}:${c.id}` ? (
+                      <div key={c.id} className="rounded-md border border-line bg-surface px-3 py-2 text-xs text-ink">
+                        <div className="font-semibold mb-1">{c.title}</div>
+                        <div className="text-muted whitespace-pre-line">{c.excerpt ?? "Policy text unavailable."}</div>
+                      </div>
+                    ) : null
                   )}
                   {m.answer!.needs_escalation && (
                     <div className="rounded-md bg-warn-bg border border-warn-line text-warn-fg text-xs px-3 py-2">
