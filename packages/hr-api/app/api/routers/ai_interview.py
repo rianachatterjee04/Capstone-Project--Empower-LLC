@@ -400,6 +400,9 @@ async def evaluate_session(
             raise HTTPException(status_code=400, detail="Unknown question_id")
         job_title = sess.job_title or ""
         org_id = sess.org_id
+        candidate_id = sess.candidate_id
+        candidate_name = sess.candidate_name
+        job_id = sess.job_id
         pending: list[tuple[str, str, str, str]] = []
         for q in sess.questions:
             if question_id is not None and q.id != question_id:
@@ -439,6 +442,10 @@ async def evaluate_session(
     evaluations = list(await asyncio.gather(*[_one(*item) for item in pending]))
     return {
         "session_id": session_id,
+        "candidate_id": candidate_id,
+        "candidate_name": candidate_name,
+        "job_id": job_id,
+        "job_title": job_title,
         "evaluated": len(evaluations),
         "evaluations": evaluations,
         "fairness_note": _FAIRNESS_NOTE,
