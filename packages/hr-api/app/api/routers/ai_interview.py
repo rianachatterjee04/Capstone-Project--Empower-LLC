@@ -403,6 +403,7 @@ async def evaluate_session(
         candidate_id = sess.candidate_id
         candidate_name = sess.candidate_name
         job_id = sess.job_id
+        job_description = sess.job_description or ""
         pending: list[tuple[str, str, str, str]] = []
         for q in sess.questions:
             if question_id is not None and q.id != question_id:
@@ -424,6 +425,7 @@ async def evaluate_session(
                     competency=competency,
                     job_title=job_title,
                     org_id=org_id,
+                    job_description=job_description,
                 )
             except Exception:
                 result = {
