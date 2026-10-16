@@ -266,6 +266,7 @@ export const NAV: NavSection[] = [
     roles: ADMIN_MGR,
     children: [
       { label: "AI assistant / helpdesk", href: "/app/assistant", aiHinted: true },
+      { label: "HR knowledge base", href: "/app/hr-knowledge", aiHinted: true },
       { label: "Agents", href: "/app/agents", aiHinted: true },
       { label: "Agent store", href: "/app/agent-store", aiHinted: true },
       { label: "Automations", href: "/app/automations", aiHinted: true },

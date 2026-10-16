@@ -27,3 +27,4 @@ pyjwt
 
 # Fintra control-plane entitlements (editable): pip install -e ../shared-py
 # fintra-entitlements
+pypdf==5.1.0

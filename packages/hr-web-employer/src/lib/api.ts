@@ -158,6 +158,43 @@ export async function apiPatch<T>(path: string, body: any): Promise<T> {
   });
 }
 
+/**
+ * POST a file as multipart form data, with the same credentials as every other
+ * request.
+ *
+ * Content-Type is NOT set here. The browser writes it, boundary included, when
+ * the body is a FormData; setting it by hand (as apiFetch does for JSON) sends a
+ * multipart body with no boundary and the server cannot read it.
+ */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const token = await getToken();
+  const headers = new Headers();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${env.apiBaseUrl}${apiPath(path)}`, {
+    method: "POST",
+    body: form,
+    headers,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    let err: any = null;
+    try {
+      err = await res.json();
+    } catch {}
+    const failure = new Error(detailMessage(err) || `HTTP ${res.status}`) as Error & {
+      status?: number;
+    };
+    failure.status = res.status;
+    throw failure;
+  }
+
+  return (await res.json()) as T;
+}
+
 
 /**
  * Fetch a protected binary and hand back a blob: URL.

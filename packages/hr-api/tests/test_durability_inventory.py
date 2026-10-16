@@ -83,7 +83,8 @@ MEMORY_ONLY = {
     "public_profile_service.py":
         "public employee profile overrides",
     "rag_service.py":
-        "helpdesk knowledge index; rebuilt from its documents",
+        "helpdesk knowledge index. The built in documents are rebuilt on start, "
+        "but HR documents an admin UPLOADS are UPLOADED CONTENT, lost on restart",
     "referrals_service.py":
         "referral records and leaderboard — EMPLOYEE SUBMISSIONS, lost on restart",
     "settings_service.py":

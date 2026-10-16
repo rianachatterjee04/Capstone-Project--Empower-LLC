@@ -15,6 +15,7 @@ import math
 import re
 import textwrap
 import threading
+import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -36,6 +37,10 @@ class KnowledgeDoc:
     body: str
     embedding: list[float] = field(default_factory=list)
     source: str = "internal"
+    # "active" documents are searched; "archived" ones are kept but never retrieved.
+    status: str = "active"
+    # Upload details (filename, size, sha256, who and when). Empty for built in docs.
+    meta: dict = field(default_factory=dict)
 
 
 # Default seed content. Each org can append its own documents via the router.
@@ -151,31 +156,89 @@ def _ensure_seeded(org_id: str) -> list[KnowledgeDoc]:
         return docs
 
 
-def add_document(org_id: str, title: str, body: str, category: str = "policy", source: str = "internal") -> dict:
+def add_document(
+    org_id: str,
+    title: str,
+    body: str,
+    category: str = "policy",
+    source: str = "internal",
+    meta: Optional[dict] = None,
+) -> dict:
     docs = _ensure_seeded(org_id)
-    doc_id = f"doc-{len(docs)+1}"
+    # A random id, not len(docs)+1: once documents can be deleted, a count based
+    # id would hand a new document the id of one that still exists.
+    doc_id = f"doc-{uuid.uuid4().hex[:12]}"
     try:
         emb = embedding(body)
     except Exception:
         emb = []
-    doc = KnowledgeDoc(id=doc_id, title=title, category=category, body=body, embedding=emb, source=source)
+    doc = KnowledgeDoc(
+        id=doc_id, title=title, category=category, body=body, embedding=emb,
+        source=source, meta=dict(meta or {}),
+    )
     with _lock:
         docs.append(doc)
     return {"id": doc.id, "title": doc.title, "category": doc.category}
 
 
-def list_documents(org_id: str) -> list[dict]:
+def _summary(d: KnowledgeDoc) -> dict:
+    return {
+        "id": d.id,
+        "title": d.title,
+        "category": d.category,
+        "source": d.source,
+        "status": d.status,
+        "preview": d.body[:200] + ("…" if len(d.body) > 200 else ""),
+        "chars": len(d.body),
+        "meta": dict(d.meta),
+    }
+
+
+def list_documents(org_id: str, include_archived: bool = True) -> list[dict]:
     docs = _ensure_seeded(org_id)
-    return [
-        {
-            "id": d.id,
-            "title": d.title,
-            "category": d.category,
-            "source": d.source,
-            "preview": d.body[:200] + ("…" if len(d.body) > 200 else ""),
-        }
-        for d in docs
-    ]
+    with _lock:
+        return [_summary(d) for d in docs if include_archived or d.status == "active"]
+
+
+def get_document(org_id: str, doc_id: str) -> Optional[KnowledgeDoc]:
+    docs = _ensure_seeded(org_id)
+    with _lock:
+        return next((d for d in docs if d.id == doc_id), None)
+
+
+def update_document(
+    org_id: str, doc_id: str, *, title: Optional[str] = None, category: Optional[str] = None
+) -> Optional[dict]:
+    with _lock:
+        doc = get_document(org_id, doc_id)
+        if doc is None:
+            return None
+        if title is not None:
+            doc.title = title
+        if category is not None:
+            doc.category = category
+        return _summary(doc)
+
+
+def set_document_status(org_id: str, doc_id: str, status: str) -> Optional[dict]:
+    if status not in ("active", "archived"):
+        raise ValueError("status must be active or archived")
+    with _lock:
+        doc = get_document(org_id, doc_id)
+        if doc is None:
+            return None
+        doc.status = status
+        return _summary(doc)
+
+
+def remove_document(org_id: str, doc_id: str) -> bool:
+    docs = _ensure_seeded(org_id)
+    with _lock:
+        for i, d in enumerate(docs):
+            if d.id == doc_id:
+                del docs[i]
+                return True
+    return False
 
 
 _STOPWORDS = frozenset(
@@ -221,7 +284,10 @@ def retrieve(org_id: str, question: str, top_k: int = 3) -> list[KnowledgeDoc]:
 
     q_terms = _terms(question)
     scored: list[tuple[float, KnowledgeDoc]] = []
-    for d in docs:
+    # A snapshot, so a delete in another request cannot shift the list mid loop.
+    for d in list(docs):
+        if d.status != "active":
+            continue
         sem = _cosine(qv, d.embedding) if qv and d.embedding else 0.0
         kw = 0.0
         if q_terms:
