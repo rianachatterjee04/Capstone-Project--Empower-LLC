@@ -63,11 +63,21 @@ def llm_complete(
         {"X-Fintra-Org": org_id, "X-Fintra-App": "hr", "X-Fintra-User": user_id or ""}
         if use_gateway else None
     )
+    chosen = model or settings.llm_model
+    # gpt-6-luna defaults to medium reasoning and then rejects temperature.
+    # Effort "none" is the mode that still accepts temperature=0.2. The
+    # installed SDK has no reasoning_effort argument, so it rides in extra_body.
+    extra_body = (
+        {"reasoning_effort": "none"}
+        if chosen.lower().startswith(("gpt-5", "gpt-6-luna", "gpt-6-sol"))
+        else None
+    )
     resp = client.chat.completions.create(
-        model=model or settings.llm_model,
+        model=chosen,
         messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         temperature=0.2,
         extra_headers=extra_headers,
+        extra_body=extra_body,
     )
     content = resp.choices[0].message.content or ""
 

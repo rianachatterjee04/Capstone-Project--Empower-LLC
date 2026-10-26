@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     temporal_address: str = Field(default="localhost:7233", alias="TEMPORAL_ADDRESS")
 
     llm_provider: str = Field(default="openai", alias="LLM_PROVIDER")
-    llm_model: str = Field(default="gpt-4.1-mini", alias="LLM_MODEL")
+    llm_model: str = Field(default="gpt-6-luna", alias="LLM_MODEL")
     # Default mock so AI Memory and RAG work locally without OPENAI_API_KEY; set to openai in production.
     embeddings_provider: str = Field(default="mock", alias="EMBEDDINGS_PROVIDER")
     embeddings_model: str = Field(default="text-embedding-3-small", alias="EMBEDDINGS_MODEL")
