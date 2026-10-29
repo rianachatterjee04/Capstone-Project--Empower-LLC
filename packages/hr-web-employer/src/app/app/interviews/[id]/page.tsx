@@ -9,6 +9,7 @@
  */
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch, apiPost } from "@/lib/api";
 import { Action, EmptyState, PageHeader, Pill, SectionTitle, Surface } from "@/components/ds";
@@ -28,8 +29,8 @@ type Candidate = {
   resume_text: string | null;
 };
 
-export default function InterviewDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function InterviewDetailPage() {
+  const { id } = useParams<{ id: string }>();
   const [generating, setGenerating] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [summary, setSummary] = useState<PostSummary | null>(null);

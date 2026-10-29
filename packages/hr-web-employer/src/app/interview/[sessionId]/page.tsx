@@ -15,6 +15,7 @@
  *   - Mobile-first, matches the Foundry design system.
  */
 import { useEffect, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import { apiFetch, apiPost } from "@/lib/api";
 import { useSpeech, prefersReducedMotion } from "@/hooks/useSpeech";
 
@@ -135,8 +136,8 @@ function Bubble({ msg }: { msg: ChatMsg }) {
 }
 
 /* ================================================================= page */
-export default function CandidateInterviewPage({ params }: { params: { sessionId: string } }) {
-  const { sessionId } = params;
+export default function CandidateInterviewPage() {
+  const { sessionId } = useParams<{ sessionId: string }>();
 
   const [phase, setPhase] = useState<"loading" | "consent" | "live" | "done" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
