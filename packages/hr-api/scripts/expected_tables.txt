@@ -49,6 +49,7 @@ competency_assessments
 driver_credentials
 emergency_contacts
 employee_benefit_elections
+employee_skills
 employees
 engagement_surveys
 escalation_rules
@@ -97,6 +98,7 @@ pto_requests
 recognition_reactions
 recognitions
 recording_assets
+role_skill_requirements
 survey_questions
 survey_responses
 time_off_ledger
