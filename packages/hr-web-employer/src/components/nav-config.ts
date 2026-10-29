@@ -215,6 +215,7 @@ export const NAV: NavSection[] = [
     children: [
       { label: "Learning paths", href: "/app/learning", aiHinted: true },
       { label: "Skills graph", href: "/app/skills", aiHinted: true },
+      { label: "Employee skills", href: "/app/employee-skills" },
       // Internal mobility lives at /app/marketplace — surfaced once, under
       // Performance as "Succession & talent marketplace".
     ],

@@ -50,6 +50,7 @@ from app.api.routers.recruiting_cockpit import router as recruiting_cockpit
 from app.api.routers.referrals import router as referrals
 from app.api.routers.interview_loop import router as interview_loop
 from app.api.routers.skills_graph import router as skills_graph
+from app.api.routers.skills_management import router as skills_management
 from app.api.routers.calibration import router as calibration
 from app.api.routers.automations import router as automations
 from app.api.routers.interviews import router as interviews
@@ -206,6 +207,7 @@ api_router.include_router(recruiting_cockpit)
 api_router.include_router(referrals)
 api_router.include_router(interview_loop)
 api_router.include_router(skills_graph)
+api_router.include_router(skills_management)
 api_router.include_router(calibration)
 api_router.include_router(automations)
 api_router.include_router(interviews)
